@@ -213,6 +213,10 @@ try {
     await page.getByLabel('看誰會收到什麼').selectOption({ label: 'E2E 老師 e2e@example.com' });
     await page.locator('iframe.mail-frame').waitFor();
     check((await page.locator('iframe.mail-frame').getAttribute('srcdoc'))?.includes('E2E 老師 您好'), 'the preview should be the recipient\'s email');
+    // first in the list: the admins' Sunday-noon reminder to schedule
+    check(await page.getByRole('switch', { name: '週日 12:00 寄審核提醒到助教信箱' }).isChecked(), 'the reminder should be on');
+    await page.getByLabel('看誰會收到什麼').selectOption({ index: 0 });
+    await page.waitForFunction(() => document.querySelector('iframe.mail-frame')?.getAttribute('srcdoc')?.includes('打開排程'));
     await page.getByRole('complementary', { name: '管理選單' }).getByRole('link', { name: '設定' }).click();
     await page.getByRole('heading', { name: '課程與規則' }).first().waitFor();
     check((await page.getByLabel('截止的星期').inputValue()) === '7' && (await page.getByLabel('截止的時間').inputValue()) === '12:00', 'requests should close on Sunday at noon');

@@ -12,6 +12,7 @@ export const RECORDING_NOTE = '討論時 Google Meet 會錄影，僅作為紀錄
 export const RECORDING_SHORT = '會錄影，僅作紀錄用';
 // The weekly email (.github/workflows/mail.yml): a preview to the admins
 // first, then each recipient's week of sessions.
+export const MAIL_REMIND = '週日 12:00';
 export const MAIL_PREVIEW = '週日 18:00';
 export const MAIL_SEND = '週一 09:00';
 /** The part that still fits a phone's top bar. */

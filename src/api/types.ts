@@ -341,16 +341,16 @@ export interface MailRecipient {
 
 export interface MailState {
   clock: ClockInfo;
-  settings: { weekly: boolean; preview: boolean; ta_email: string };
+  settings: { weekly: boolean; preview: boolean; remind: boolean; ta_email: string };
   /** the Monday the next email is about */
   week: string;
   teachers: Array<{ id: number; name: string }>;
   recipients: MailRecipient[];
-  log: Array<{ kind: 'weekly' | 'preview'; week: string; email: string; subject: string; sessions: number; at: string }>;
+  log: Array<{ kind: MailMessage['kind']; week: string; email: string; subject: string; sessions: number; at: string }>;
 }
 
 export interface MailMessage {
-  kind: 'weekly' | 'preview';
+  kind: 'weekly' | 'preview' | 'remind';
   week: string;
   to: string;
   name: string;

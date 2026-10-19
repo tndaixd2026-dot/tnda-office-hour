@@ -1,6 +1,7 @@
 // Sends the weekly Office Hour email; run by .github/workflows/mail.yml.
 //
 //   KIND=weekly   each recipient gets this week's sessions (Monday)
+//   KIND=remind   the admins' mailbox gets next week's requests (Sunday noon)
 //   KIND=preview  the admins' mailbox gets all of it first (Sunday)
 //   KIND=test     the email with every PM's sessions for the nearest week
 //                 that has some, only to the sending account; nothing is logged
@@ -19,7 +20,7 @@ import nodemailer from 'nodemailer';
 import pg from 'pg';
 
 const on = (v) => v === '1' || v === 'true';
-const kind = ['preview', 'test'].includes(process.env.KIND) ? process.env.KIND : 'weekly';
+const kind = ['remind', 'preview', 'test'].includes(process.env.KIND) ? process.env.KIND : 'weekly';
 const dry = on(process.env.DRY_RUN);
 const force = on(process.env.FORCE);
 const test = on(process.env.MAIL_TEST);
@@ -71,10 +72,12 @@ if (process.env.SEND_AT && !dry) {
 
 const db = new pg.Client({ connectionString: url, ssl: /localhost|127\.0\.0\.1/.test(url) ? false : { rejectUnauthorized: false } });
 await db.connect();
-// Monday's email is about the week it starts; Sunday's preview, the coming
-// one; a test, the first week from this one on with sessions (or the last)
+// Monday's email is about the week it starts; Sunday's reminder and preview,
+// the coming one; a test, the first week from this one on with sessions (or
+// the last)
 const from = {
   weekly: 'app.today()',
+  remind: 'app.mail_week(app.today())',
   preview: 'app.mail_week(app.today())',
   test: `coalesce((select min(a.d) from app.appointments a where a.status = 'confirmed'
                      and a.d >= app.today() - (extract(isodow from app.today())::int - 1)),
