@@ -14,7 +14,11 @@ async function scan(page, name) {
   await page.evaluate(axeSource);
   const r = await page.evaluate(async () =>
     // @ts-ignore
-    window.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'] } }),
+    window.axe.run(document, {
+      runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'] },
+      // the hero's ::before glow is decorative; without this, axe marks everything on the hero "incomplete" and checks none of it
+      checks: { 'color-contrast': { options: { ignorePseudo: true } } },
+    }),
   );
   const bad = r.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical' || v.impact === 'moderate');
   results.push({ name, bad });
