@@ -90,7 +90,9 @@ describe('TD lessons', () => {
     const r = await db.call('oh_lessons');
     await db.sql('reset role');
     expect(r.info.title).toBe('TD 專班課表');
-    expect(r.types).toEqual(['基礎教學', '案例分享', '解惑時間']);
+    expect(r.types).toEqual(['基礎教學', '案例分享', '駐村創作']);
+    // the seeded 解惑時間 lessons were renamed along with the type
+    expect(r.lessons.filter((l: any) => l.type === '駐村創作')).toHaveLength(24);
     expect(r.lessons).toHaveLength(84);
     expect(r.lessons[0]).toEqual({
       id: r.lessons[0].id, date: '2026-10-26', start: '21:00', end: '22:00', teacher: '浡崴', type: '基礎教學', title: '', topic: '',
@@ -118,7 +120,8 @@ describe('TD lessons', () => {
     });
     expect(added).toMatchObject({ date: '2027-01-06', start: '21:00', end: '22:00', teacher: '哲瑜', title: 'Houdini 入門', topic: '帶筆電\n\n先裝好軟體' });
     const moved = await db.call('oh_admin_lesson_save', { p_token: admin, p: { ...lesson({ start: '20:00', end: '21:30', type: '解惑時間' }), id: added.id } });
-    expect(moved).toMatchObject({ id: added.id, start: '20:00', end: '21:30', type: '解惑時間', title: '' });
+    // the type's old name still works and is saved as the new one
+    expect(moved).toMatchObject({ id: added.id, start: '20:00', end: '21:30', type: '駐村創作', title: '' });
     expect((await db.call('oh_lessons')).lessons).toHaveLength(85);
     expect(await db.call('oh_admin_lesson_delete', { p_token: admin, p_id: added.id })).toEqual({ ok: true });
     await expectCode(db.call('oh_admin_lesson_delete', { p_token: admin, p_id: added.id }), 'NOT_FOUND', 'lesson');
@@ -223,7 +226,7 @@ describe('TD lessons', () => {
     expect(unfolded).toContain('DTSTART:20270106T130000Z');
     expect(unfolded).toContain('DTEND:20270106T140000Z');
     expect(unfolded).toContain(String.raw`SUMMARY:TD 基礎教學 · 浡崴｜Houdini\, 粒子\; 入門`);
-    expect(unfolded).toContain('SUMMARY:TD 解惑時間 · 哲瑜\r\n');
+    expect(unfolded).toContain('SUMMARY:TD 駐村創作 · 哲瑜\r\n');
     expect(unfolded).toContain(String.raw`DESCRIPTION:Houdini\, 粒子\; 入門\n\n帶筆電\n先裝好軟體\n\n講師：浡崴　類型：基礎教學`);
     expect(unfolded).toContain('LOCATION:https://meet.google.com/abc-defg-hij');
     expect(unfolded.match(/BEGIN:VEVENT/g)).toHaveLength(2);
@@ -237,7 +240,7 @@ describe('TD lessons', () => {
     const one = await feed(' 哲瑜 ');
     expect(one).toContain('X-WR-CALNAME:TD 專班課表 115-2 · 哲瑜');
     expect(one.match(/BEGIN:VEVENT/g)).toHaveLength(1);
-    expect(one).toContain('SUMMARY:TD 解惑時間 · 哲瑜');
+    expect(one).toContain('SUMMARY:TD 駐村創作 · 哲瑜');
     expect((await feed('沒有這個人')).match(/BEGIN:VEVENT/g)).toBeNull();
     expect((await feed(null)).match(/BEGIN:VEVENT/g)).toHaveLength(2);
   });
