@@ -5,7 +5,8 @@ import { ISSUE } from '../../app/messages';
 import { go, href } from '../../app/router';
 import { local } from '../../app/store';
 import { csvText, download } from '../../lib/files';
-import { minutesText, slotLines, timeRange } from '../../lib/format';
+import { MAIL_PREVIEW, MAIL_SEND } from '../../config';
+import { deadlineText, minutesText, slotLines, timeRange } from '../../lib/format';
 import { autoSchedule } from '../../lib/scheduler';
 import { addDays, addMinutes, agoText, dayLabel, DOW, isoDow, localStamp, md, mdPad, minutes } from '../../lib/time';
 import { ask, confirm, openDialog } from '../../ui/dialog';
@@ -508,6 +509,18 @@ function BoardView({ st, reload }: { st: AdminState; reload: () => void }) {
             </Menu>
           </div>
         </div>
+        {nowStamp < week.deadline ? (
+          <p class="small muted">學生的需求在 {deadlineText(week.deadline)} 截止，截止後就不能再修改</p>
+        ) : (
+          nowStamp < `${week.start} 00:00` && (
+            <div class="notice warn">
+              <Icon name="clock" />
+              <span class="small">
+                需求已在 {deadlineText(week.deadline)} 截止。請在 {MAIL_PREVIEW} 前排好並發布，{MAIL_SEND} 會把這週的場次寄給老師
+              </span>
+            </div>
+          )
+        )}
         <WeekStrip
           value={st.week_id}
           onPick={(id) => go(`admin/board/${id}`)}
@@ -777,7 +790,7 @@ function BoardView({ st, reload }: { st: AdminState; reload: () => void }) {
               </span>
               <div>
                 <CopyBtn
-                  text={`提醒：${week.label || mdPad(week.start)} 的 Office Hour 預約，請在當天的 ${st.settings.lead_days} 天前到平台勾選可以的時段：${siteUrl()}`}
+                  text={`提醒：${week.label || mdPad(week.start)} 的 Office Hour 預約在 ${deadlineText(week.deadline)} 截止，請在那之前到平台勾選可以的時段：${siteUrl()}`}
                   label="複製提醒訊息"
                 />
               </div>

@@ -9,7 +9,7 @@ import { Icon } from '../ui/icons';
 import { BrandMark, Btn, Field } from '../ui/kit';
 
 const ROLE_TEXT = {
-  teacher: '查看你的 Office Hour 行程，以及每組事先寫好的題目與進度',
+  teacher: '查看每位老師的 Office Hour 行程，以及每組事先寫好的題目與進度',
   admin: '管理預約需求、排程、小組代碼與所有設定',
 };
 

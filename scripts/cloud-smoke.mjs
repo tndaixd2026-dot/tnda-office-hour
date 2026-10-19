@@ -56,6 +56,9 @@ r = await rpc('oh_lessons');
 const td = await r.json();
 ok(r.ok && Array.isArray(td.lessons) && td.info?.title, 'the TD timetable is public');
 
+r = await rpc('oh_admin_mail', { p_token: 'x'.repeat(64) });
+ok(r.status === 400 && (await r.json()).message === 'AUTH', 'email recipients are for admins only');
+
 r = await rpc('oh_admin_lesson_save', { p_token: 'x'.repeat(64), p: {} });
 ok(r.status === 400 && (await r.json()).message === 'AUTH', 'only admins can change the TD timetable');
 

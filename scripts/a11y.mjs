@@ -43,7 +43,7 @@ for (const scheme of ['light', 'dark']) {
   await page.locator('.demobar').getByRole('button', { name: '助教', exact: true }).click();
   await page.waitForTimeout(900);
   await scan(page, 'admin board');
-  for (const [link, label] of [['總覽與紀錄', 'admin overview'], ['小組與邀請', 'admin groups'], ['老師', 'admin teachers'], ['時段與週次', 'admin calendar'], ['設定', 'admin settings'], ['TD 課表', 'admin TD timetable']]) {
+  for (const [link, label] of [['總覽與紀錄', 'admin overview'], ['小組與邀請', 'admin groups'], ['老師', 'admin teachers'], ['時段與週次', 'admin calendar'], ['寄信通知', 'admin weekly email'], ['設定', 'admin settings'], ['TD 課表', 'admin TD timetable']]) {
     await page.getByRole('complementary', { name: '管理選單' }).getByRole('link', { name: link }).click();
     await page.waitForTimeout(700);
     await scan(page, label);

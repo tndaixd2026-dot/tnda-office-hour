@@ -116,7 +116,7 @@ describe('joining', () => {
     await expectCode(db.call('oh_admin_state', { p_token: tea }), 'FORBIDDEN');
     await expectCode(db.call('oh_teacher_state', { p_token: stu }), 'FORBIDDEN');
     await expectCode(db.call('oh_student_state', { p_token: tea }), 'FORBIDDEN');
-    await expectCode(db.call('oh_admin_save', { p_token: stu, p_kind: 'settings', p: { lead_days: 0 } }), 'FORBIDDEN');
+    await expectCode(db.call('oh_admin_save', { p_token: stu, p_kind: 'settings', p: { close_dow: 1 } }), 'FORBIDDEN');
   });
 
   it('lets students rename themselves', async () => {
@@ -218,33 +218,38 @@ describe('student requests', () => {
     await expectCode(db.call('oh_request_save', { p_token: a1, ...basicRequest(w7, [[W7.fri, '11:30']]) }), 'CONFLICT');
   });
 
-  it('enforces the booking deadline only for newly added slots', async () => {
+  it('closes each week at noon on the Sunday before', async () => {
     const g2 = await db.call('oh_request_save', { p_token: c2, ...basicRequest(w7, [[W7.mon, '17:00'], [W7.wed, '11:00']]) });
-    // Saturday 10/17: Monday and Tuesday are now within 4 days
-    await db.setNow('2026-10-17T10:00:00+08:00');
-    const st = await db.call('oh_student_state', { p_token: c2 });
-    expect(st.slots.find((s: any) => s.d === W7.mon).late).toBe(true);
-    expect(st.slots.find((s: any) => s.d === W7.wed).late).toBe(false);
-    await expectCode(
-      db.call('oh_request_save', { p_token: c2, ...basicRequest(w7, [[W7.tue, '17:00'], [W7.wed, '11:00']], { p_version: g2.version }) }),
-      'SLOT_LATE',
-    );
-    // keeping the already-late Monday pick is fine
-    const kept = await db.call('oh_request_save', {
+    let st = await db.call('oh_student_state', { p_token: c2 });
+    expect(st.weeks[0].deadline).toBe('2026-10-18 12:00');
+    expect(st.settings).toMatchObject({ close_dow: 7, close_time: '12:00' });
+    expect(st.settings).not.toHaveProperty('lead_days');
+    // Sunday 11:59: still open, and every slot of the week can change, Monday's too
+    await db.setNow('2026-10-18T11:59:00+08:00');
+    const edited = await db.call('oh_request_save', {
       p_token: c2,
-      ...basicRequest(w7, [[W7.mon, '17:00'], [W7.wed, '11:30']], { p_version: g2.version }),
+      ...basicRequest(w7, [[W7.mon, '17:30'], [W7.wed, '11:00']], { p_version: g2.version }),
     });
-    expect(kept.slots).toHaveLength(2);
-    // Wednesday is exactly 4 days ahead: still allowed
-    await db.call('oh_request_save', {
-      p_token: c2,
-      ...basicRequest(w7, [[W7.mon, '17:00'], [W7.wed, '10:00']], { p_version: kept.version }),
-    });
-    await db.setNow('2026-10-18T10:00:00+08:00');
+    expect(edited.version).toBe(g2.version + 1);
+    // 12:00: no more changes or withdrawals; the next week is the one to book
+    await db.setNow('2026-10-18T12:00:00+08:00');
+    st = await db.call('oh_student_state', { p_token: c2, p_week: w7 });
+    expect(st.weeks[0].bookable).toBe(false);
+    expect(st.slots.every((x: any) => x.late)).toBe(true);
     await expectCode(
-      db.call('oh_request_save', { p_token: c2, ...basicRequest(w7, [[W7.wed, '11:00']], { p_version: kept.version + 1 }) }),
-      'SLOT_LATE',
+      db.call('oh_request_save', { p_token: c2, ...basicRequest(w7, [[W7.wed, '11:00']], { p_version: edited.version }) }),
+      'WEEK_LATE',
+      '10/18（日）12:00',
     );
+    await expectCode(db.call('oh_request_withdraw', { p_token: c2, p_week: w7, p_version: edited.version }), 'WEEK_LATE');
+    st = await db.call('oh_student_state', { p_token: c2 });
+    expect(st.week_id).toBe(w7 + 1);
+    expect(st.slots.find((x: any) => x.d === '2026-10-26').late).toBe(false);
+    // the admins can move the deadline, say to Saturday 18:00
+    await db.sql(`update app.settings set close_dow = 6, close_time = '18:00'`);
+    st = await db.call('oh_student_state', { p_token: c2 });
+    expect(st.weeks[1].deadline).toBe('2026-10-24 18:00');
+    await db.sql(`update app.settings set close_dow = 7, close_time = '12:00'`);
     await db.setNow(WED);
   });
 
@@ -319,7 +324,7 @@ describe('scheduling', () => {
     expect(st.scheduling).toBe(true);
     expect(st.appointments).toEqual([]);
     let t = await db.call('oh_teacher_state', { p_token: joseph });
-    expect(t.team).toEqual([]);
+    expect(t.sessions).toEqual([]);
 
     const pub = await db.call('oh_admin_publish', { p_token: admin, p_week: w7 });
     expect(pub.published).toHaveLength(1);
@@ -328,10 +333,10 @@ describe('scheduling', () => {
     expect(st.appointments).toHaveLength(1);
     expect(st.appointments[0]).toMatchObject({ d: W7.wed, t: '10:00', status: 'confirmed', teacher: null, can_cancel: true, topic: '感測器延遲' });
     expect(st.weeks[0].booked).toBe(1);
+    // every teacher sees every PM's sessions, their own marked
     t = await db.call('oh_teacher_state', { p_token: joseph });
-    expect(t.team).toHaveLength(1);
-    expect(t.team[0]).toMatchObject({ teacher: 'Prolong', mine: false });
-    expect(t.mine).toEqual([]);
+    expect(t.sessions).toHaveLength(1);
+    expect(t.sessions[0]).toMatchObject({ teacher: 'Prolong', teacher_id: ids.prolong, mine: false, request: { topic: '感測器延遲' } });
   });
 
   it('never double-books a teacher or a group', async () => {
@@ -430,8 +435,9 @@ describe('scheduling', () => {
     await expectCode(db.call('oh_admin_apply', { p_token: admin, p_week: w7, p_items: [{ group_id: 'x' }] }), 'VALIDATION', 'items');
     await db.call('oh_admin_publish', { p_token: admin, p_week: w7 });
     const t = await db.call('oh_teacher_state', { p_token: joseph });
-    expect(t.mine.map((m: any) => [m.d, m.t, m.group.no])).toEqual([[W7.mon, '17:00', 2]]);
-    expect(t.mine[0].request).toMatchObject({ topic: '感測器延遲', progress: '第一版原型完成' });
+    const mine = t.sessions.filter((m: any) => m.mine);
+    expect(mine.map((m: any) => [m.d, m.t, m.group.no])).toEqual([[W7.mon, '17:00', 2]]);
+    expect(mine[0].request).toMatchObject({ topic: '感測器延遲', progress: '第一版原型完成' });
   });
 
   it('lets students cancel until the cut-off', async () => {
@@ -445,8 +451,7 @@ describe('scheduling', () => {
     expect(c).toMatchObject({ status: 'cancelled', cancelled_by: 'B', cancel_reason: '組員生病' });
     await expectCode(db.call('oh_appointment_cancel', { p_token: g2, p_id: mon.id }), 'NOT_FOUND', 'appointment');
     const t = await db.call('oh_teacher_state', { p_token: joseph });
-    expect(t.mine.find((m: any) => m.d === W7.mon)).toMatchObject({ status: 'cancelled', cancel_reason: '組員生病' });
-    expect(t.team.find((m: any) => m.d === W7.mon)).toBeUndefined();
+    expect(t.sessions.find((m: any) => m.d === W7.mon)).toMatchObject({ status: 'cancelled', cancel_reason: '組員生病', mine: true });
     await db.setNow(WED);
   });
 
@@ -480,9 +485,13 @@ describe('administration', () => {
   });
 
   it('updates settings within bounds', async () => {
-    const s = await db.call('oh_admin_save', { p_token: admin, p_kind: 'settings', p: { lead_days: 3, notice: ' 期中週暫停 ', show_teacher_names: true } });
-    expect(s).toMatchObject({ lead_days: 3, notice: '期中週暫停', show_teacher_names: true, week_cap: 3 });
-    await expectCode(db.call('oh_admin_save', { p_token: admin, p_kind: 'settings', p: { lead_days: 99 } }), 'VALIDATION', 'settings');
+    const s = await db.call('oh_admin_save', {
+      p_token: admin, p_kind: 'settings', p: { close_dow: 6, close_time: '18:00', notice: ' 期中週暫停 ', show_teacher_names: true },
+    });
+    expect(s).toMatchObject({ close_dow: 6, close_time: '18:00', notice: '期中週暫停', show_teacher_names: true, week_cap: 3 });
+    await expectCode(db.call('oh_admin_save', { p_token: admin, p_kind: 'settings', p: { close_dow: 8 } }), 'VALIDATION', 'settings');
+    await expectCode(db.call('oh_admin_save', { p_token: admin, p_kind: 'settings', p: { close_time: 'noon' } }), 'VALIDATION', 'settings');
+    await db.call('oh_admin_save', { p_token: admin, p_kind: 'settings', p: { close_dow: 7, close_time: '12:00' } });
     await expectCode(db.call('oh_admin_save', { p_token: admin, p_kind: 'settings', p: { week_cap: 'many' } }), 'VALIDATION', 'settings');
     await expectCode(db.call('oh_admin_save', { p_token: admin, p_kind: 'nope', p: {} }), 'VALIDATION', 'kind');
   });
@@ -577,7 +586,8 @@ describe('administration', () => {
   it('shows full configuration to admins', async () => {
     const cfg = await db.call('oh_admin_config', { p_token: admin });
     expect(cfg.groups[0].code).toHaveLength(8);
-    expect(cfg.teachers.map((t: any) => t.name)).toEqual(['Joseph', 'Prolong', 'Tim']);
+    // the shared account first, then the PMs
+    expect(cfg.teachers.map((t: any) => [t.name, t.team])).toEqual([['叁式', true], ['Joseph', false], ['Prolong', false], ['Tim', false]]);
     expect(cfg.admins.find((a: any) => a.me).name).toBe('助教');
     expect(cfg.blocks.length).toBeGreaterThanOrEqual(7);
   });

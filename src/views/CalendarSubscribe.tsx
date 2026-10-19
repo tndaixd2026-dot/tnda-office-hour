@@ -16,11 +16,11 @@ function feedUrl(feed: string) {
  * Opens the "subscribe to your calendar" dialog. `download` exports the
  * current sessions once, for people who prefer a plain file.
  */
-export function openCalendarDialog(opts: { who: 'teacher' | 'student'; download: () => void }) {
+export function openCalendarDialog(opts: { who: 'teacher' | 'team' | 'student'; download: () => void }) {
   openDialog('訂閱行事曆', (close) => <CalendarDialog who={opts.who} download={opts.download} close={close} />, { wide: 'wide' });
 }
 
-function CalendarDialog({ who, download, close }: { who: 'teacher' | 'student'; download: () => void; close: () => void }) {
+function CalendarDialog({ who, download, close }: { who: 'teacher' | 'team' | 'student'; download: () => void; close: () => void }) {
   const { engine, call } = useApi();
   const { busy, run } = useBusy();
   const [feed, setFeed] = useState<string | null>(null);
@@ -52,7 +52,7 @@ function CalendarDialog({ who, download, close }: { who: 'teacher' | 'student'; 
       <div class="stack tight">
         <h2>訂閱行事曆</h2>
         <p class="muted small">
-          訂閱一次，之後{who === 'teacher' ? '排給你的' : '你們這組的'}場次都會自動出現在行事曆裡，時間異動或取消也會跟著更新，開始前 15 分鐘提醒
+          訂閱一次，之後{who === 'team' ? '每位老師的' : who === 'teacher' ? '排給你的' : '你們這組的'}場次都會自動出現在行事曆裡，時間異動或取消也會跟著更新，開始前 15 分鐘提醒
         </p>
       </div>
 
@@ -88,7 +88,7 @@ function CalendarDialog({ who, download, close }: { who: 'teacher' | 'student'; 
             </div>
           </div>
           <p class="tiny muted">
-            這個網址就是你的行事曆內容{who === 'teacher' ? '（包含各組的題目與進度）' : ''}，請不要貼到公開的地方。Google 日曆大約每幾小時更新一次；Apple 行事曆可以在訂閱設定裡改成每 15 分鐘
+            這個網址就是你的行事曆內容{who !== 'student' ? '（包含各組的題目與進度）' : ''}，請不要貼到公開的地方。Google 日曆大約每幾小時更新一次；Apple 行事曆可以在訂閱設定裡改成每 15 分鐘
           </p>
         </div>
       )}

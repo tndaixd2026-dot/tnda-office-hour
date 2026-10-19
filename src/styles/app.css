@@ -2361,6 +2361,32 @@ table.t tr.mine td {
   text-align: center;
 }
 
+/* checkbox with its label; the whole row is the target */
+.check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  font-size: 15px;
+  cursor: pointer;
+}
+.check input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--ink);
+  flex: 0 0 auto;
+}
+
+/* an email, as it will arrive */
+.mail-frame {
+  width: 100%;
+  height: 680px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: #f5f4f0;
+}
+
 /* ---------- TD 專班課表 ---------- */
 /* one colour per teacher; the name is always written next to it */
 .tc0 {

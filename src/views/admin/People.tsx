@@ -434,7 +434,7 @@ export function TeachersPage() {
           <p class="eyebrow">老師</p>
           <h1 class="title-l">{host}</h1>
           <p class="muted small" style={{ maxWidth: '560px' }}>
-            老師到首頁輸入自己的名字就能登入，或打開專屬連結。登入後可以看到自己的場次、各組題目與進度，也能一鍵加入行事曆。老師不需要做任何設定
+            老師到首頁輸入自己的名字就能登入，或打開專屬連結。每位老師看到的都是同一個畫面：三位老師這週和下週的全部場次、各組題目與進度，自己的會標出來。老師不需要做任何設定
           </p>
         </div>
         <Btn
@@ -449,14 +449,33 @@ export function TeachersPage() {
           新增老師
         </Btn>
       </div>
-      {cfg.teachers.length === 0 ? (
+      {cfg.teachers.filter((t) => !t.team).length === 0 ? (
         <Empty icon="user" title="還沒有老師" />
       ) : (
         <div class="list">
-          {cfg.teachers.map((t) => (
-            <TeacherRow key={t.id} t={t} save={save} reload={reload} />
-          ))}
+          {cfg.teachers
+            .filter((t) => !t.team)
+            .map((t) => (
+              <TeacherRow key={t.id} t={t} save={save} reload={reload} />
+            ))}
         </div>
+      )}
+      {cfg.teachers.some((t) => t.team) && (
+        <section class="section" aria-labelledby="t-shared">
+          <div class="section-head">
+            <h2 id="t-shared">共用帳號</h2>
+          </div>
+          <p class="muted small" style={{ maxWidth: '600px' }}>
+            給業師公司或老師助理用：輸入這個名字或打開專屬連結就能登入，看到的是同一個畫面，不會被排進任何場次。訂閱行事曆會包含三位老師的全部場次
+          </p>
+          <div class="list">
+            {cfg.teachers
+              .filter((t) => t.team)
+              .map((t) => (
+                <TeacherRow key={t.id} t={t} save={save} reload={reload} />
+              ))}
+          </div>
+        </section>
       )}
     </main>
   );

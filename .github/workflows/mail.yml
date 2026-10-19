@@ -1,0 +1,61 @@
+# The weekly email to the teachers (scripts/send-mail.mjs). GitHub starts
+# scheduled runs late at busy times, so each one starts early and the
+# script waits for the exact time in Taipei:
+#   Sunday 18:00  a preview of everything to the admins' mailbox
+#   Monday 09:00  each recipient's week of sessions
+# Needs the repository secrets GMAIL_USER and GMAIL_APP_PASSWORD (a Gmail
+# app password) besides SUPABASE_DB_PASSWORD.
+name: Weekly email
+
+on:
+  schedule:
+    - cron: '38 9 * * 0' # Sunday 17:38 Taipei
+    - cron: '38 0 * * 1' # Monday 08:38 Taipei
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: 'preview：寄預覽給助教信箱；weekly：寄給所有收件人'
+        type: choice
+        options: [preview, weekly]
+        default: preview
+      force:
+        description: '這週已經寄過也再寄一次'
+        type: boolean
+        default: false
+      dry_run:
+        description: '只列出要寄的信，不真的寄出'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: weekly-email
+  cancel-in-progress: false
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      - name: Send
+        env:
+          KIND: ${{ github.event_name == 'workflow_dispatch' && inputs.kind || (github.event.schedule == '38 9 * * 0' && 'preview' || 'weekly') }}
+          SEND_AT: ${{ github.event_name == 'schedule' && (github.event.schedule == '38 9 * * 0' && '18:00' || '09:00') || '' }}
+          FORCE: ${{ inputs.force && '1' || '' }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          # session-mode pooler: runners have no IPv6 for the direct db host
+          POOLER_HOST: aws-0-ap-northeast-1.pooler.supabase.com
+        run: node scripts/send-mail.mjs

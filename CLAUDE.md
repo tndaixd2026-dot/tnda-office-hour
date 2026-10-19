@@ -1,6 +1,10 @@
 # Office Hour 預約平台：給 Claude 的工作說明
 
-TN0006「跨域數位製作實務」的 Office Hour 預約平台，名稱是「叁式 30 分鐘 一週三次」（`src/config.ts` 的 `APP_NAME`，另外寫在 `index.html` 和 `public/manifest.webmanifest`）。規則是每組每週最多 3 次、每次 30 分鐘、一天一次（設定裡的每週上限 3 格、每天上限 1 格）。學生以小組為單位勾選可以的時段，助教排程後發布，老師只看到排給自己的場次，所有畫面即時同步。使用說明、架構圖、展示腳本在 `README.md`。
+TN0006「跨域數位製作實務」的 Office Hour 預約平台，名稱是「叁式 30 分鐘 一週三次」（`src/config.ts` 的 `APP_NAME`，另外寫在 `index.html` 和 `public/manifest.webmanifest`）。規則是每組每週最多 3 次、每次 30 分鐘、一天一次（設定裡的每週上限 3 格、每天上限 1 格）。學生以小組為單位勾選可以的時段，所有畫面即時同步。使用說明、架構圖、展示腳本在 `README.md`。
+
+每週的節奏：下一週的需求在**前一週的週日 12:00** 截止（設定的 `close_dow`／`close_time`，`app.week_deadline()`；截止後學生不能修改或撤回，`WEEK_LATE`），助教週日 12:00–18:00 排程並發布，**週日 18:00** 寄預覽到助教信箱，**週一 09:00** 寄信給收件人。舊的 `lead_days` 欄位已經不用了。
+
+老師端是同一個畫面：三位老師（Joseph、Prolong、Tim）和共用帳號「叁式」（`app.teachers.team = true`，給業師公司或老師助理）登入後都看到三位老師的全部場次。共用帳號不會被排進任何場次、不能有開放時段（`app.not_team()` trigger），行事曆包含所有老師的場次。
 
 另外有一份 **TD 專班課表**（週三 VSAI 課程的助教課，和週四的跨域課不是同一批學生），公開頁在 `#/td`，不用登入；助教在後台「TD 課表」編輯、匯入或匯出（格式同原本獨立網站的 `schedule.json`）。資料在 `app.lessons`、`app.lesson_info`，API 是 `oh_lessons`（公開）、`oh_admin_lesson_*`、`oh_admin_lessons_*` 和公開行事曆 `oh_lessons_calendar`。同一時間只能有一堂課（`LESSON_CLASH`）。課表是公開的：薪資、時數、助教不能上課的日期、週三進階課不要放進去。學生名單（含個資）在 Notion，不要匯入這個平台。
 
@@ -21,7 +25,8 @@ TN0006「跨域數位製作實務」的 Office Hour 預約平台，名稱是「�
 - 小組、老師、助教的代碼和資料庫密碼，**不要貼進對話、commit、issue 或 log**。產生或更換後寫進 `.secrets/`。
 - `.secrets/`（已 gitignore）：`db-password.txt`、`admin-code.txt`、`project-ref.txt`。換電腦時用 AirDrop 這類離線方式搬，不要經過 Git、Email 或聊天。
 - 助教登入連結由使用者自己保管在 repo 外。
-- GitHub repo secret `SUPABASE_DB_PASSWORD`：資料庫密碼，給 GitHub Actions 推 migration 用。更換資料庫密碼時要一起更新（repo → Settings → Secrets and variables → Actions）。
+- GitHub repo secret `SUPABASE_DB_PASSWORD`：資料庫密碼，給 GitHub Actions 推 migration 和寄信用。更換資料庫密碼時要一起更新（repo → Settings → Secrets and variables → Actions）。
+- GitHub repo secret `GMAIL_USER`、`GMAIL_APP_PASSWORD`：寄每週信的 Gmail 和它的應用程式密碼（不是登入密碼），由使用者自己設定。收件人的 Email 存在資料庫（`app.mail_recipients`），在後台「寄信通知」維護，不要寫進 repo。Actions 的紀錄是公開的，寄信腳本只能印主旨和數量，不能印 Email。
 - `.env.production` 裡的 Supabase publishable key 本來就是公開的（只能呼叫 `oh_*` 函式），可以 commit。
 
 ## 架構
@@ -33,10 +38,11 @@ TN0006「跨域數位製作實務」的 Office Hour 預約平台，名稱是「�
 - 示範模式（`#/demo`）：在瀏覽器裡用 PGlite 跑**同一套** migration，再載入 `src/db/demo.sql`（日期以今天為基準）。
 - Discord：用 pg_net 非同步送出，並設 `allowed_mentions: {parse: []}`，學生寫的 @everyone 不會真的標記所有人。
 - 行事曆訂閱：`oh_calendar` 透過 PostgREST 的 `"*/*"` domain 回傳 `text/calendar`。GET 請求會把 `apikey` 當成函式參數傳進來，所以函式簽名必須保留 `apikey`。
+- 每週寄信：`.github/workflows/mail.yml` 執行 `scripts/send-mail.mjs`（用 `SUPABASE_DB_PASSWORD` 連 pooler，用 Gmail SMTP 寄）。信的內容全部由 `app.mail_outbox`／`app.mail_message` 在資料庫產生，後台預覽（`oh_admin_mail_preview`）和實際寄出的是同一份；`app.mail_log` 防止同一週重複寄（`FORCE=1` 才會再寄）。本機試跑：`DATABASE_URL=… KIND=weekly MAIL_TEST=1 node scripts/send-mail.mjs`。
 
 | 位置 | 內容 |
 |---|---|
-| `supabase/migrations/` | 資料表、API 函式、Discord、登入期限、私有即時頻道、行事曆、名字登入與學生名單 |
+| `supabase/migrations/` | 資料表、API 函式、Discord、登入期限、私有即時頻道、行事曆、名字登入與學生名單、TD 課表、老師共用畫面、每週截止、每週寄信 |
 | `supabase/seed.sql` | 課程初始資料 |
 | `src/db/sql.ts` | 示範模式的 bootstrap 和 `MIGRATIONS` 清單 |
 | `src/api/` | `cloud.ts`（Supabase）和 `demo.ts`（PGlite）實作同一個 `Engine` 介面 |
@@ -45,7 +51,7 @@ TN0006「跨域數位製作實務」的 Office Hour 預約平台，名稱是「�
 | `src/lib/` | 時間計算、閃身步排程法（最大流）、ICS／CSV 匯出、TD 課表分組（`lessons.ts`） |
 | `src/ui/`、`src/styles/app.css` | 元件、對話框、圖示、toast、樣式 |
 | `tests/` | Vitest；資料庫規則用 PGlite 執行真正的 SQL |
-| `scripts/` | E2E、axe 掃描、雲端檢查、本機重置、學期重置 |
+| `scripts/` | E2E、axe 掃描、雲端檢查、本機重置、學期重置、每週寄信（`send-mail.mjs`） |
 
 ## 修改流程
 
@@ -75,7 +81,7 @@ TN0006「跨域數位製作實務」的 Office Hour 預約平台，名稱是「�
 
 - **開學前**：
   1. 確認 Supabase 專案沒有暫停。如果暫停了，到後台按 Resume（免費）。
-  2. 執行 `gh workflow enable keepalive.yml`。公開 repo 連續 60 天沒有 commit 時，GitHub 會停用這個排程，而且停用後不會自己恢復。
+  2. 執行 `gh workflow enable keepalive.yml` 和 `gh workflow enable mail.yml`。公開 repo 連續 60 天沒有 commit 時，GitHub 會停用排程，而且停用後不會自己恢復。
   3. 新學期要清空紀錄時，**先問過使用者**，再執行 `scripts/fresh-start.sql`。執行後所有舊連結都會失效，學生名單也會清空，要請助教重新填。TD 專班課表不會被清掉，要在後台「TD 課表」用匯入換掉。
 - Supabase 免費專案閒置 7 天就會暫停，學期中有人使用就不會。暫停前一週和暫停當下，Supabase 都會寄信給組織擁有者。
 

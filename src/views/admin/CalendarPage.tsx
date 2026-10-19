@@ -136,7 +136,7 @@ function editBlock(cfg: AdminConfig, b: Block | null, save: Save) {
 }
 
 function BlockForm({ cfg, b, close, save }: { cfg: AdminConfig; b: Block | null; close: () => void; save: Save }) {
-  const [teacher, setTeacher] = useState(b?.teacher_id ?? cfg.teachers.find((t) => t.active)?.id ?? 0);
+  const [teacher, setTeacher] = useState(b?.teacher_id ?? cfg.teachers.find((t) => t.active && !t.team)?.id ?? 0);
   const [kind, setKind] = useState<'weekly' | 'once'>(b?.on_date ? 'once' : 'weekly');
   const [dow, setDow] = useState(b?.dow ?? 1);
   const [date, setDate] = useState(b?.on_date ?? clock.today);
@@ -171,7 +171,7 @@ function BlockForm({ cfg, b, close, save }: { cfg: AdminConfig; b: Block | null;
       <h2>{b ? '編輯時段' : '新增開放時段'}</h2>
       <Field label="老師">
         <select class="select" value={teacher} onChange={(e) => setTeacher(Number((e.target as HTMLSelectElement).value))}>
-          {cfg.teachers.map((t) => (
+          {cfg.teachers.filter((t) => !t.team).map((t) => (
             <option key={t.id} value={t.id}>
               {t.name}
               {t.active ? '' : '（停用中）'}
@@ -273,7 +273,7 @@ function ClosureForm({ cfg, c, close, save }: { cfg: AdminConfig; c: Closure | n
       <Field label="誰休息">
         <select class="select" value={who} onChange={(e) => setWho(Number((e.target as HTMLSelectElement).value))}>
           <option value={0}>所有人（假日）</option>
-          {cfg.teachers.map((t) => (
+          {cfg.teachers.filter((t) => !t.team).map((t) => (
             <option key={t.id} value={t.id}>
               {t.name} 請假
             </option>

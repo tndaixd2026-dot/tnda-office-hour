@@ -14,7 +14,9 @@ export interface Settings {
   host_label: string;
   location: string;
   notice: string;
-  lead_days: number;
+  /** requests for a week close on this weekday (1 = Monday) of the week before, at close_time */
+  close_dow: number;
+  close_time: string;
   week_cap: number;
   day_cap: number;
   cancel_hours: number;
@@ -77,6 +79,8 @@ export interface StudentWeek {
   bookable: boolean;
   requested: boolean;
   booked: number;
+  /** 'YYYY-MM-DD HH:MM', course time: requests close then */
+  deadline: string;
 }
 
 export interface StudentSlot extends SlotRef {
@@ -119,6 +123,10 @@ export interface TeacherSession {
   d: string;
   t: string;
   status: 'confirmed' | 'cancelled';
+  teacher_id: number;
+  teacher: string;
+  /** the signed-in teacher's own session */
+  mine: boolean;
   cancel_reason: string | null;
   group: { no: number; name: string };
   request: {
@@ -131,14 +139,23 @@ export interface TeacherSession {
   } | null;
 }
 
+/** One screen for every PM (and the shared account): everyone's sessions. */
 export interface TeacherState {
   clock: ClockInfo;
   settings: Settings;
-  me: SessionInfo;
-  mine: TeacherSession[];
-  team: Array<{ d: string; t: string; teacher: string; mine: boolean; group: { no: number; name: string }; topic: string | null }>;
-  blocks: Array<{ dow: number | null; on_date: string | null; start: string; end: string; valid_from: string | null; valid_to: string | null }>;
-  closures: Array<{ d: string; reason: string; mine: boolean }>;
+  me: SessionInfo & { team: boolean };
+  teachers: Array<{ id: number; name: string }>;
+  sessions: TeacherSession[];
+  blocks: Array<{
+    teacher_id: number;
+    dow: number | null;
+    on_date: string | null;
+    start: string;
+    end: string;
+    valid_from: string | null;
+    valid_to: string | null;
+  }>;
+  closures: Array<{ d: string; reason: string; teacher_id: number | null }>;
 }
 
 export interface Appointment {
@@ -163,6 +180,8 @@ export interface AdminWeek {
   label: string;
   open: boolean;
   note: string;
+  /** 'YYYY-MM-DD HH:MM', course time */
+  deadline: string;
   requests: number;
   scheduled: number;
   drafts: number;
@@ -231,6 +250,8 @@ export interface ConfigTeacher {
   sort: number;
   devices: number;
   used: boolean;
+  /** the shared account that sees every PM's sessions */
+  team: boolean;
 }
 
 export interface ConfigAdmin {
@@ -306,4 +327,36 @@ export interface LessonsState {
   info: LessonInfo;
   types: string[];
   lessons: Lesson[];
+}
+
+// Weekly email (oh_admin_mail)
+export interface MailRecipient {
+  id: number;
+  email: string;
+  name: string;
+  /** empty: every teacher */
+  teachers: number[];
+  active: boolean;
+}
+
+export interface MailState {
+  clock: ClockInfo;
+  settings: { weekly: boolean; preview: boolean; ta_email: string };
+  /** the Monday the next email is about */
+  week: string;
+  teachers: Array<{ id: number; name: string }>;
+  recipients: MailRecipient[];
+  log: Array<{ kind: 'weekly' | 'preview'; week: string; email: string; subject: string; sessions: number; at: string }>;
+}
+
+export interface MailMessage {
+  kind: 'weekly' | 'preview';
+  week: string;
+  to: string;
+  name: string;
+  subject: string;
+  html: string;
+  text: string;
+  count: number;
+  sent_at: string | null;
 }

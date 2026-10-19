@@ -28,6 +28,17 @@ export function minutesText(n: number): string {
   return `${n} 分鐘`;
 }
 
+/** 'YYYY-MM-DD HH:MM' → "10/25（週日）12:00" */
+export function deadlineText(stamp: string): string {
+  const [d, t] = stamp.split(' ');
+  return `${md(d)}（${DOW[isoDow(d)]}）${t}`;
+}
+
+/** The weekly rule in words: "前一週的週日 12:00" */
+export function closeRuleText(s: { close_dow: number; close_time: string }): string {
+  return `前一週的${DOW[s.close_dow]} ${s.close_time}`;
+}
+
 export function greeting(hour: number): string {
   if (hour < 5) return '夜深了';
   if (hour < 11) return '早安';

@@ -105,7 +105,7 @@ export function useTick(ms = 30000): number {
 }
 
 /** Runs one mutation at a time, with a busy flag and an error toast. */
-export function useBusy(settings?: Pick<Settings, 'lead_days' | 'cancel_hours'>) {
+export function useBusy(settings?: Pick<Settings, 'cancel_hours'>) {
   const [busy, setBusy] = useState<string | null>(null);
   const run = useCallback(
     async <T,>(
@@ -126,7 +126,7 @@ export function useBusy(settings?: Pick<Settings, 'lead_days' | 'cancel_hours'>)
         setBusy(null);
       }
     },
-    [settings?.lead_days, settings?.cancel_hours],
+    [settings?.cancel_hours],
   );
   return { busy, run };
 }

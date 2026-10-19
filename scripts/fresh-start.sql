@@ -1,14 +1,14 @@
 -- Start a semester fresh: keeps the course setup (settings, groups,
--- teachers, availability, weeks, holidays) but removes every request,
--- session, sign-in, student roster and log entry, and issues brand-new
--- invite codes and calendar links. Everyone has to join again with the
+-- teachers, availability, weeks, holidays, email recipients) but removes
+-- every request, session, sign-in, student roster, sent-email record and
+-- log entry, and issues brand-new invite codes and calendar links. Everyone has to join again with the
 -- new links, or by name once the new rosters are in.
 --
 --   psql "$DATABASE_URL" -f scripts/fresh-start.sql
 begin;
 
 truncate app.events, app.appointments, app.request_slots, app.requests,
-         app.sessions, app.join_attempts, app.roster restart identity;
+         app.sessions, app.join_attempts, app.roster, app.mail_log restart identity;
 
 update app.groups   set code = app.new_code(8),  feed = app.new_feed();
 update app.teachers set code = app.new_code(10), feed = app.new_feed();

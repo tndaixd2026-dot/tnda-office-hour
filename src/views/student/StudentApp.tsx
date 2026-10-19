@@ -4,7 +4,7 @@ import { clock, useApi, useBusy, useDiff, useLive, useTick } from '../../app/hoo
 import { go } from '../../app/router';
 import { signOut, updateSession } from '../../app/session';
 import { downloadIcs } from '../../lib/files';
-import { slotLines, timeRange, minutesText } from '../../lib/format';
+import { closeRuleText, deadlineText, slotLines, timeRange, minutesText } from '../../lib/format';
 import { addDays, addMinutes, agoText, dayLabel, instant, mdPad, relativeDay, tzNote, untilText } from '../../lib/time';
 import { ask, confirm } from '../../ui/dialog';
 import { toast } from '../../ui/toast';
@@ -302,10 +302,11 @@ function Home({ st, setWeek, reload }: { st: StudentState; setWeek: (id: number)
           <h1 class="title-l">還沒有排定的時段</h1>
           <p class="muted">勾選你們這週可以的時段，越多越容易排到。整組共用一份需求，誰來填都可以</p>
           {firstBookable && (
-            <div>
+            <div class="row wrap">
               <Btn variant="primary" size="lg" icon="arrow" onClick={() => go(`book/${firstBookable.id}`)}>
                 預約 {firstBookable.label || mdPad(firstBookable.start)}
               </Btn>
+              <span class="small muted">{deadlineText(firstBookable.deadline)} 截止</span>
             </div>
           )}
         </section>
@@ -337,6 +338,11 @@ function Home({ st, setWeek, reload }: { st: StudentState; setWeek: (id: number)
                   {mdPad(week.start)}–{mdPad(addDays(week.start, 4))}
                 </h3>
                 {week.note && <span class="small muted">{week.note}</span>}
+                {week.open && (
+                  <span class="small muted">
+                    預約{week.bookable ? '' : '已在'} {deadlineText(week.deadline)} 截止
+                  </span>
+                )}
               </div>
               {!week.open ? (
                 <span class="chip">暫停預約</span>
@@ -395,22 +401,28 @@ function Home({ st, setWeek, reload }: { st: StudentState; setWeek: (id: number)
                 <p class="tiny faint">
                   {req.author} 更新於 {agoText(req.updated_at, now)}
                 </p>
-                <div class="row wrap">
-                  <Btn icon="edit" onClick={() => go(`book/${req.week_id}`)} disabled={!week.open}>
-                    修改需求
-                  </Btn>
-                  {confirmedThisWeek.length === 0 && (
-                    <Btn variant="ghost" class="danger" loading={busy === 'withdraw'} onClick={withdraw}>
-                      撤回
+                {week.bookable ? (
+                  <div class="row wrap">
+                    <Btn icon="edit" onClick={() => go(`book/${req.week_id}`)}>
+                      修改需求
                     </Btn>
-                  )}
-                </div>
+                    {confirmedThisWeek.length === 0 && (
+                      <Btn variant="ghost" class="danger" loading={busy === 'withdraw'} onClick={withdraw}>
+                        撤回
+                      </Btn>
+                    )}
+                  </div>
+                ) : (
+                  week.open &&
+                  confirmedThisWeek.length === 0 && <p class="small muted">已過預約截止，助教正在排時間。需要調整請在 Discord 告訴助教</p>
+                )}
               </div>
             ) : week.bookable ? (
               <div class="stack">
                 {req?.status === 'withdrawn' && <p class="small muted">這週的需求已撤回（{req.author}）。重新送出時會帶入原本的內容</p>}
                 <p class="muted">
-                  勾選這週所有可以的時段，再寫下想討論的題目和目前進度，助教會從中幫你們排 {minutesText(mins)}到{minutesText(mins * st.settings.week_cap)}
+                  勾選這週所有可以的時段，再寫下想討論的題目和目前進度，助教會從中幫你們排 {minutesText(mins)}到{minutesText(mins * st.settings.week_cap)}。請在{' '}
+                  {deadlineText(week.deadline)} 前送出，之前都可以修改
                 </p>
                 <div>
                   <Btn variant="primary" size="lg" icon="arrow" onClick={() => go(`book/${week.id}`)}>
@@ -421,7 +433,7 @@ function Home({ st, setWeek, reload }: { st: StudentState; setWeek: (id: number)
             ) : (
               weekAppts.length === 0 && (
                 <Empty icon="clock" title={week.open ? '這週已過預約截止' : '這週暫停預約'}>
-                  {week.open ? `需要在當天的 ${st.settings.lead_days} 天前預約。看看下一週吧` : '有問題可以在 Discord 詢問助教'}
+                  {week.open ? `每週的預約在${closeRuleText(st.settings)} 截止。看看下一週吧` : '有問題可以在 Discord 詢問助教'}
                 </Empty>
               )
             )}
@@ -465,7 +477,7 @@ function Home({ st, setWeek, reload }: { st: StudentState; setWeek: (id: number)
           </div>
           <div>
             <dt>預約截止</dt>
-            <dd>當天的 {st.settings.lead_days} 天前</dd>
+            <dd>{closeRuleText(st.settings)}</dd>
           </div>
         </dl>
       </section>

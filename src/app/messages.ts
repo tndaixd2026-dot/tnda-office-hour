@@ -21,6 +21,7 @@ const FIELD: Record<string, string> = {
   lesson: '請確認日期、時間、講師和類型（結束要晚於開始，講師最多 20 字）',
   lesson_info: '標題需為 1–40 字，副標題最多 80 字，地點最多 200 字，公告最多 500 字',
   lessons: '檔案格式不對：需要有 sessions 清單，最多 500 堂',
+  mail: '請輸入正確的 Email，稱呼最多 40 字',
   kind: '不支援的操作',
 };
 
@@ -55,7 +56,7 @@ export const ISSUE: Record<string, string> = {
   SLOT_TAKEN: '這個時段已經排了別組（只有一個會議室）',
 };
 
-export function errorText(e: unknown, s?: Pick<Settings, 'lead_days' | 'cancel_hours'>): string {
+export function errorText(e: unknown, s?: Pick<Settings, 'cancel_hours'>): string {
   if (!(e instanceof ApiError)) return MESSAGES.CLIENT;
   switch (e.code) {
     case 'VALIDATION':
@@ -69,7 +70,9 @@ export function errorText(e: unknown, s?: Pick<Settings, 'lead_days' | 'cancel_h
     case 'NOT_FOUND':
       return '找不到這筆資料，可能已經被刪除或修改了';
     case 'SLOT_LATE':
-      return `有時段已過預約截止（需在 ${s?.lead_days ?? 4} 天前預約）`;
+      return '有時段已過預約截止';
+    case 'WEEK_LATE':
+      return `這週的預約已在 ${e.detail} 截止，要調整請在 Discord 告訴助教`;
     case 'CANCEL_LATE':
       return `距離開始不到 ${s?.cancel_hours ?? 24} 小時，請直接在 Discord 告訴助教`;
     case 'NEEDS_FORCE':

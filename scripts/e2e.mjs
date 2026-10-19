@@ -46,7 +46,9 @@ async function session(viewport, isMobile = false) {
   if (process.env.FAKE_TIME) await page.clock.install({ time: new Date(process.env.FAKE_TIME) });
   page.on('pageerror', (e) => problems.push(`[${step}] page error: ${e.message}`));
   page.on('console', (m) => {
-    if (m.type() === 'error' && !/favicon|fonts\.g/.test(m.text())) problems.push(`[${step}] console: ${m.text()}`);
+    // the fake clock tries to run in the email preview too, whose sandbox (rightly) says no
+    const harness = /Blocked script execution in 'about:srcdoc'/.test(m.text());
+    if (m.type() === 'error' && !harness && !/favicon|fonts\.g/.test(m.text())) problems.push(`[${step}] console: ${m.text()}`);
   });
   page.on('dialog', (d) => d.dismiss());
   return { ctx, page };
@@ -168,6 +170,7 @@ try {
       ['小組與邀請', /個小組/],
       ['老師', '叁式 PM'],
       ['時段與週次', '什麼時候可以約'],
+      ['寄信通知', '每週寄給老師的信'],
       ['設定', '課程與規則'],
     ]) {
       await page.getByRole('complementary', { name: '管理選單' }).getByRole('link', { name: label }).click();
@@ -192,6 +195,27 @@ try {
     await d.getByRole('button', { name: '取消' }).click();
     await page.getByRole('complementary', { name: '管理選單' }).getByRole('link', { name: '設定' }).click();
     await page.getByRole('heading', { name: '課程與規則' }).first().waitFor();
+  });
+
+  await run('admin sets up the weekly email and previews it', async () => {
+    await page.getByRole('complementary', { name: '管理選單' }).getByRole('link', { name: '寄信通知' }).click();
+    await page.getByRole('button', { name: '新增收件人' }).click();
+    const d = page.getByRole('dialog', { name: '新增收件人' });
+    await d.getByLabel('Email').fill('e2e@localhost'); // the browser lets it through; the server does not
+    await d.getByRole('button', { name: '儲存' }).click();
+    await d.getByText('請輸入正確的 Email').waitFor();
+    await d.getByLabel('Email').fill('e2e@example.com');
+    await d.getByLabel('稱呼').fill('E2E 老師');
+    await d.getByLabel('只有 Prolong').check();
+    await d.getByRole('button', { name: '儲存' }).click();
+    await page.getByText('已新增收件人').waitFor();
+    await page.getByText('收 Prolong 的場次').waitFor();
+    await page.getByLabel('看誰會收到什麼').selectOption({ label: 'E2E 老師 e2e@example.com' });
+    await page.locator('iframe.mail-frame').waitFor();
+    check((await page.locator('iframe.mail-frame').getAttribute('srcdoc'))?.includes('E2E 老師 您好'), 'the preview should be the recipient\'s email');
+    await page.getByRole('complementary', { name: '管理選單' }).getByRole('link', { name: '設定' }).click();
+    await page.getByRole('heading', { name: '課程與規則' }).first().waitFor();
+    check((await page.getByLabel('截止的星期').inputValue()) === '7' && (await page.getByLabel('截止的時間').inputValue()) === '12:00', 'requests should close on Sunday at noon');
   });
 
   await run('admin changes a setting', async () => {
@@ -323,12 +347,20 @@ try {
     await role(page, '學生');
     await page.getByText('E2E 公告').waitFor();
     check(await page.locator('.hero').isVisible(), 'hero missing');
+    check((await page.locator('.rules').textContent()).includes('前一週的週日 12:00'), 'the rules should give the weekly deadline');
   });
 
-  await run('teacher sees sessions', async () => {
+  await run('teachers share one view of every PM', async () => {
     await role(page, '老師');
-    await page.getByRole('heading', { name: '我的場次' }).waitFor();
-    await page.getByText('這兩週全部場次').waitFor();
+    await page.getByRole('heading', { name: '這週一覽' }).waitFor();
+    const byTeacher = page.getByRole('group', { name: '只看哪位老師' });
+    check((await byTeacher.getByRole('button').count()) === 4, 'every PM plus 全部 should be offered');
+    check((await page.getByText('你的場次').count()) > 0, 'the signed-in PM should see their own sessions marked');
+    await byTeacher.getByRole('button', { name: /^Prolong/ }).click();
+    check((await page.locator('.li .ls-who', { hasText: 'Joseph' }).count()) === 0, 'another PM is still listed');
+    await byTeacher.getByRole('button', { name: /^全部/ }).click();
+    await page.getByRole('button', { name: /^下週/ }).click();
+    await page.getByRole('heading', { name: '下週一覽' }).waitFor();
   });
 
   await ctx.close();
@@ -354,6 +386,18 @@ try {
     check(cols === 1, `expected 1 day column, got ${cols}`);
     const overflow = await m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     check(overflow <= 0, `admin page scrolls sideways by ${overflow}px`);
+  });
+  await run('mobile teacher view and email page fit the screen', async () => {
+    await m.page.locator('.demobar').getByRole('button', { name: '老師', exact: true }).click();
+    await m.page.getByRole('heading', { name: '這週一覽' }).waitFor();
+    let overflow = await m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    check(overflow <= 0, `teacher view scrolls sideways by ${overflow}px`);
+    await m.page.locator('.demobar').getByRole('button', { name: '助教', exact: true }).click();
+    await m.page.locator('.matrix').waitFor();
+    await m.page.evaluate(() => (location.hash = '#/admin/mail'));
+    await m.page.getByRole('heading', { name: '每週寄給老師的信' }).waitFor();
+    overflow = await m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    check(overflow <= 0, `email page scrolls sideways by ${overflow}px`);
   });
   await run('mobile TD timetable fits the screen', async () => {
     await m.page.evaluate(() => (location.hash = '#/td'));

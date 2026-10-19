@@ -21,7 +21,8 @@ describe('demo data', () => {
       const teacher = await db.call('oh_join', { p_code: 'DEMOT00001' });
       const ts = await db.call('oh_teacher_state', { p_token: teacher.token });
       expect(ts.me.name).toBe('Joseph');
-      expect(ts.mine.length).toBeGreaterThan(0);
+      expect(ts.sessions.some((x: any) => x.mine)).toBe(true);
+      expect(ts.sessions.some((x: any) => !x.mine)).toBe(true);
 
       // the auto-scheduler's proposal is accepted by the server as-is
       const proposal = autoSchedule({

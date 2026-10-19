@@ -2,11 +2,14 @@ import { useEffect, useState } from 'preact/hooks';
 import type { AdminConfig, Settings } from '../../api/types';
 import { useApi, useBusy, useLive } from '../../app/hooks';
 import { minutesText } from '../../lib/format';
+import { DOW, hm } from '../../lib/time';
 import { ask, confirm } from '../../ui/dialog';
 import { Icon } from '../../ui/icons';
 import { Btn, Field, Loading, Switch, copyText } from '../../ui/kit';
 import { ErrorState } from '../student/StudentApp';
 import { inviteLink, prettyCode, rotateFlow } from './People';
+
+const CLOSE_TIMES = Array.from({ length: 48 }, (_, i) => hm(i * 30));
 
 export function SettingsPage() {
   const { data: cfg, error, reload } = useLive<AdminConfig>('oh_admin_config', {});
@@ -28,7 +31,7 @@ function SettingsView({ cfg, reload }: { cfg: AdminConfig; reload: () => void })
     if (r) reload();
   };
 
-  const num = (k: 'lead_days' | 'week_cap' | 'day_cap' | 'cancel_hours', label: string, min: number, max: number, help: string) => (
+  const num = (k: 'week_cap' | 'day_cap' | 'cancel_hours', label: string, min: number, max: number, help: string) => (
     <Field label={label} help={help}>
       <input
         class="input mono"
@@ -101,7 +104,27 @@ function SettingsView({ cfg, reload }: { cfg: AdminConfig; reload: () => void })
           </div>
           <div class="row top wrap">
             <div class="grow" style={{ minWidth: '200px' }}>
-              {num('lead_days', '預約截止（天前）', 0, 60, '學生最晚要在當天的幾天前勾選')}
+              <div class="field">
+                <span class="label" id="close-label">
+                  預約截止
+                </span>
+                <div class="row" role="group" aria-labelledby="close-label">
+                  <span class="small nowrap">前一週的</span>
+                  <select class="select" aria-label="截止的星期" value={s.close_dow} onChange={(e) => set('close_dow', Number((e.target as HTMLSelectElement).value))}>
+                    {[1, 2, 3, 4, 5, 6, 7].map((d) => (
+                      <option key={d} value={d}>
+                        {DOW[d]}
+                      </option>
+                    ))}
+                  </select>
+                  <select class="select" aria-label="截止的時間" value={s.close_time} onChange={(e) => set('close_time', (e.target as HTMLSelectElement).value)}>
+                    {CLOSE_TIMES.map((t) => (
+                      <option key={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+                <span class="help">截止後整週的需求就不能再修改或撤回，助教接著排時間</span>
+              </div>
             </div>
             <div class="grow" style={{ minWidth: '200px' }}>
               {num('cancel_hours', '學生可取消（小時前）', 0, 336, '超過這個時間，只能請助教取消')}
