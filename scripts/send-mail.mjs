@@ -2,6 +2,8 @@
 //
 //   KIND=weekly   each recipient gets this week's sessions (Monday)
 //   KIND=preview  the admins' mailbox gets all of it first (Sunday)
+//   KIND=test     this week's email with every PM's sessions, only to the
+//                 sending account itself; nothing is logged
 //   SUPABASE_DB_PASSWORD, POOLER_HOST   or DATABASE_URL directly
 //   GMAIL_USER, GMAIL_APP_PASSWORD      the account that sends
 //   SEND_AT=09:00  wait for this time in Taipei first (at most an hour)
@@ -17,7 +19,7 @@ import nodemailer from 'nodemailer';
 import pg from 'pg';
 
 const on = (v) => v === '1' || v === 'true';
-const kind = process.env.KIND === 'preview' ? 'preview' : 'weekly';
+const kind = ['preview', 'test'].includes(process.env.KIND) ? process.env.KIND : 'weekly';
 const dry = on(process.env.DRY_RUN);
 const force = on(process.env.FORCE);
 const test = on(process.env.MAIL_TEST);
@@ -69,25 +71,23 @@ if (process.env.SEND_AT && !dry) {
 
 const db = new pg.Client({ connectionString: url, ssl: /localhost|127\.0\.0\.1/.test(url) ? false : { rejectUnauthorized: false } });
 await db.connect();
-// Monday's email is about the week it starts; Sunday's preview, the coming one
+// Monday's email (and a test) is about the week it starts; Sunday's preview, the coming one
 const week = (
   await db.query(
-    `select (case when $1 = 'weekly' then app.today() - (extract(isodow from app.today())::int - 1)
+    `select (case when $1 <> 'preview' then app.today() - (extract(isodow from app.today())::int - 1)
                   else app.mail_week(app.today()) end)::text as w`,
     [kind],
   )
 ).rows[0].w;
-const list = (
-  await db.query('select app.mail_outbox($1, $2::date, $3, $4, $5, $6, $7) as v', [
-    kind,
-    week,
-    site,
-    env.VITE_SUPABASE_URL,
-    env.VITE_SUPABASE_KEY,
-    user ?? null,
-    force,
-  ])
-).rows[0].v;
+const urls = [site, env.VITE_SUPABASE_URL, env.VITE_SUPABASE_KEY];
+let list;
+if (kind === 'test') {
+  // the email with every PM's sessions, and only ever to the sending account
+  const m = (await db.query(`select app.mail_message($1::date, '{}', null, $2, $3, $4) as v`, [week, ...urls])).rows[0].v;
+  list = [{ ...m, to: user, subject: `【測試】${m.subject}` }];
+} else {
+  list = (await db.query('select app.mail_outbox($1, $2::date, $3, $4, $5, $6, $7) as v', [kind, week, ...urls, user ?? null, force])).rows[0].v;
+}
 console.log(`${kind} email for the week of ${week}: ${list.length} message(s) to send`);
 
 const mailer = dry ? null : nodemailer.createTransport(test ? { jsonTransport: true } : { service: 'gmail', auth: { user, pass } });
@@ -100,7 +100,7 @@ for (const [i, m] of list.entries()) {
   }
   try {
     await mailer.sendMail({ from: { name: '叁式 30 分鐘 一週三次', address: user }, to: m.to, subject: m.subject, html: m.html, text: m.text });
-    await db.query('select app.mail_sent($1, $2::date, $3, $4, $5)', [m.kind, m.week, m.to, m.subject, m.count]);
+    if (kind !== 'test') await db.query('select app.mail_sent($1, $2::date, $3, $4, $5)', [m.kind, m.week, m.to, m.subject, m.count]);
     console.log(`  sent ${label}`);
   } catch (e) {
     failed++;

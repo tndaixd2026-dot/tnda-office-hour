@@ -154,7 +154,7 @@ export function MailPage() {
             到 GitHub repo 的 Settings → Secrets and variables → Actions，新增兩個 secret：<code class="mono">GMAIL_USER</code>（Gmail 地址）和{' '}
             <code class="mono">GMAIL_APP_PASSWORD</code>（剛剛的 16 個字母）。密碼不要貼到其他地方
           </li>
-          <li>到 Actions → Weekly email → Run workflow，選「preview」試寄一份預覽給自己</li>
+          <li>到 Actions → Weekly email → Run workflow，選「test」寄一封測試信給寄件的 Gmail 自己，不會寄給收件人</li>
         </ol>
       </details>
     </main>

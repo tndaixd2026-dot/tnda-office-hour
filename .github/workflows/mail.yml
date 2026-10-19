@@ -14,10 +14,10 @@ on:
   workflow_dispatch:
     inputs:
       kind:
-        description: 'preview：寄預覽給助教信箱；weekly：寄給所有收件人'
+        description: 'test：把這週的信只寄給寄件的 Gmail 自己；preview：寄預覽給助教信箱；weekly：寄給所有收件人'
         type: choice
-        options: [preview, weekly]
-        default: preview
+        options: [test, preview, weekly]
+        default: test
       force:
         description: '這週已經寄過也再寄一次'
         type: boolean
