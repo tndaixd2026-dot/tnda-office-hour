@@ -77,6 +77,18 @@ for (const scheme of ['light', 'dark']) {
   await page.locator('.demobar').getByRole('button', { name: '老師', exact: true }).click();
   await page.waitForTimeout(900);
   await scan(page, 'teacher');
+  // phone width: wide tables scroll sideways there
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(400);
+  await scan(page, 'teacher (phone)');
+  await page.locator('.demobar').getByRole('button', { name: '助教', exact: true }).click();
+  await page.evaluate(() => (location.hash = '#/admin/overview'));
+  await page.waitForTimeout(700);
+  await scan(page, 'admin overview (phone)');
+  await page.evaluate(() => (location.hash = '#/admin/mail'));
+  await page.locator('iframe.mail-frame').waitFor();
+  await page.waitForTimeout(700);
+  await scan(page, 'admin weekly email (phone)');
   await ctx.close();
 }
 await browser.close();

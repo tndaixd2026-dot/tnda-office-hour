@@ -120,7 +120,7 @@ export function MailPage() {
         {st.log.length === 0 ? (
           <p class="muted small">還沒有寄過信。第一次使用前，請先完成下面的 Gmail 設定</p>
         ) : (
-          <div class="table-wrap">
+          <div class="table-wrap" tabIndex={0} role="region" aria-labelledby="m-log">
             <table class="t">
               <thead>
                 <tr>

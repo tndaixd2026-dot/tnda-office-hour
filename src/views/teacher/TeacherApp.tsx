@@ -284,7 +284,8 @@ function TeacherHome({ st }: { st: TeacherState }) {
 /** Days down, PMs across: who has what this week, at a glance. */
 function Overview({ st, days, sessions }: { st: TeacherState; days: string[]; sessions: TeacherSession[] }) {
   return (
-    <div class="table-wrap">
+    // scrolls sideways on phones, so keyboard users need to reach it
+    <div class="table-wrap" tabIndex={0} role="region" aria-label="每位老師的場次">
       <table class="t">
         <caption class="sr-only">每位老師的場次</caption>
         <thead>

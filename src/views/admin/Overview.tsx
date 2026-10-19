@@ -108,7 +108,7 @@ export function Overview() {
             <h2 id="ov-groups">各組參與狀況</h2>
             <span class="small muted">次數少的組可以多關心一下</span>
           </div>
-          <div class="table-wrap">
+          <div class="table-wrap" tabIndex={0} role="region" aria-labelledby="ov-groups">
             <table class="t">
               <thead>
                 <tr>
