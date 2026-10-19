@@ -358,6 +358,10 @@ export function Welcome({ initialCode }: { initialCode?: string }) {
           <p class="tiny faint">
             我們只記錄你的名字與組別，用來顯示誰填寫了需求。登入資訊只存在這台裝置上
           </p>
+          <div class="divider" />
+          <p class="small muted">
+            找 TD 專班的課？<a href="#/td">查看 TD 專班課表</a>，不用登入
+          </p>
         </div>
       </section>
     </main>

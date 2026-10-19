@@ -7,6 +7,7 @@ TN0006「一場體驗如何發生：跨域數位製作實務」的 Office Hour �
 
 - 正式網站：<https://tndaixd2026-dot.github.io/tnda-office-hour/>
 - 示範模式（不需代碼，三種角色都能試）：<https://tndaixd2026-dot.github.io/tnda-office-hour/#/demo>
+- TD 專班課表（週三 VSAI 的助教課，公開、不用登入）：<https://tndaixd2026-dot.github.io/tnda-office-hour/#/td>
 
 ![Office Hour](public/og.png)
 
@@ -33,6 +34,15 @@ TN0006「一場體驗如何發生：跨域數位製作實務」的 Office Hour �
 6. 想讓通知自動進 Discord：在小組卡片按「連結頻道」，貼上該頻道的 Webhook 網址。
 
 規則（每週／每天上限、預約截止、可取消時間、公告）都在 **設定** 裡調整，改動立即生效。
+
+## TD 專班課表
+
+週三 VSAI 課程的 TD 專班（助教上的基礎教學、案例分享、解惑時間）也放在這個平台，網址是 `#/td`。
+
+- **公開、不用登入。** 學生打開網址就看得到「下一堂」、整學期清單（依週分組，已結束的週收起來）和月曆，可以依講師、類型篩選。也可以一鍵訂閱到 Google 日曆／Apple 行事曆，加課、改時間、補上標題都會自動更新。
+- **助教在後台「TD 課表」維護。** 新增、修改、刪除每一堂，改頁面標題、上課地點和公告；所有人的畫面即時更新。同一時間只能排一堂課（不管是哪位講師），撞時段時會直接說和哪一堂重疊。
+- **匯入與匯出。** 格式和原本獨立課表網站的 `schedule.json` 一樣。新學期可以把整份課表做成 JSON 一次匯入（會取代全部的課）。
+- 這份課表是公開的，所以不要放薪資、時數、助教不能上課的日期等內部資料。
 
 ## 設計
 
@@ -63,7 +73,7 @@ flowchart LR
 - **後端就是一組 SQL 函式。** 所有資料表都在不對外開放的 `app` schema；瀏覽器只能呼叫 `public.oh_*` 函式，每個函式先驗證身份，再套用預約規則（截止日、每週／每日上限、老師不重複、組員同時編輯的版本衝突）。規則只寫在資料庫一處，任何客戶端都繞不過。
 - **即時同步。** 每次寫入都會在 `oh-sync` 頻道廣播「哪張表變了」，只有表名，不含任何資料；客戶端收到後透過 API 重新取得自己有權看的資料。斷線時還有切回分頁、恢復網路、每分鐘輪詢三層保險。
 - **示範模式跑的是同一套 SQL。** 用 [PGlite](https://pglite.dev)（編譯成 WebAssembly 的 Postgres）在瀏覽器裡建立完整資料庫，執行與正式環境完全相同的 migration。引擎從 jsDelivr 下載（約 2 秒），並用建置時記錄的 SHA-256 驗證；失敗時改用網站自帶的備份。
-- **行事曆訂閱也是同一套 SQL。** `oh_calendar` 直接由 PostgREST 以 `text/calendar` 回應（`"*/*"` media type handler），每位老師、每一組各有一條可作廢的私密網址，不需要另外的伺服器。
+- **行事曆訂閱也是同一套 SQL。** `oh_calendar` 直接由 PostgREST 以 `text/calendar` 回應（`"*/*"` media type handler），每位老師、每一組各有一條可作廢的私密網址，不需要另外的伺服器。TD 專班課表的 `oh_lessons_calendar` 用同一個方法，但是公開的，所有人共用一條網址。
 - **閃身步排程法是最大流問題。** `來源 → 小組 → 小組·當天 → 時段 → 老師容量`。第一階段讓每組最多一場、依「本學期次數少者優先、先送出者優先」增廣，得到能被服務的最多組數；第二階段再幫想約一小時的組補第二場。最後為每個時段分配老師，優先延續這組上次見過的 PM。
 - **一個會議室，一個時段一組。** 所有場次都在同一個 Google Meet 會議室（設定裡的「地點」填網址就會顯示成連結），所以即使同一時段有兩位 PM 開放，也只排一組：閃身步排程法每個時段最多放一組，助教手動排進已有別組的時段時會先跳出確認，學生畫面上已排給別組的時段顯示「已排滿」。
 
@@ -82,7 +92,7 @@ flowchart LR
 ```bash
 npm install
 npm run dev          # http://localhost:5173（沒有 .env.local 時只能用示範模式）
-npm test             # 資料庫 API、排程演算法、Discord 通知、行事曆：63 項
+npm test             # 資料庫 API、排程演算法、Discord 通知、行事曆、TD 課表：88 項
 npm run build && npx vite preview --port 4173
 npm run e2e -- http://localhost:4173/   # 真實瀏覽器跑三種角色（示範模式）
 ```
@@ -113,7 +123,7 @@ supabase db push
 psql "<資料庫連線字串>" -f scripts/fresh-start.sql
 ```
 
-週次可以在「時段與週次」→「產生週次」一次建立。
+週次可以在「時段與週次」→「產生週次」一次建立。TD 專班課表不會被清掉，新學期在後台「TD 課表」用匯入換成新的課表。
 
 ### 開學前檢查
 
@@ -140,12 +150,12 @@ Supabase 免費方案提供 500 MB 資料庫、每月 5 GB 流量、200 個同�
 ## 專案結構
 
 ```
-supabase/migrations/   資料表、API 函式、Discord 通知、登入期限、名字登入
+supabase/migrations/   資料表、API 函式、Discord 通知、登入期限、名字登入、TD 課表
 supabase/seed.sql      課程初始資料（小組、老師、開放時段、W7–W18）
 src/api/               雲端（Supabase）與示範（PGlite）兩種引擎，同一個介面
-src/views/             student / teacher / admin / Welcome
+src/views/             student / teacher / admin / lessons（TD 課表公開頁）/ Welcome
 src/lib/scheduler.ts   閃身步排程法（最大流）
-tests/                 Vitest：資料庫規則、排程、示範資料、Discord
+tests/                 Vitest：資料庫規則、排程、示範資料、Discord、TD 課表
 scripts/               端對端測試、雲端安全檢查、PGlite 資產準備
 ```
 

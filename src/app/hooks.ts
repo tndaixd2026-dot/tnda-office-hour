@@ -30,9 +30,10 @@ export function useApi() {
 /**
  * Loads a state function and keeps it fresh: refetches on realtime pings,
  * when the tab comes back, when the network returns, and every minute as
- * a safety net. Older responses never overwrite newer ones.
+ * a safety net. Older responses never overwrite newer ones. `anon` calls
+ * a public function, without a session token.
  */
-export function useLive<T extends { clock?: ClockInfo }>(fn: string, args: Record<string, unknown> = {}) {
+export function useLive<T extends { clock?: ClockInfo }>(fn: string, args: Record<string, unknown> = {}, anon = false) {
   const { engine, call } = useApi();
   const [data, setData] = useState<T | undefined>(undefined);
   const [error, setError] = useState<ApiError | null>(null);
@@ -42,7 +43,8 @@ export function useLive<T extends { clock?: ClockInfo }>(fn: string, args: Recor
   const load = useCallback(async () => {
     const id = ++seq.current;
     try {
-      const r = await call<T>(fn, JSON.parse(argKey));
+      if (anon && !engine) throw new ApiError('NETWORK');
+      const r = anon ? await engine!.call<T>(fn, JSON.parse(argKey)) : await call<T>(fn, JSON.parse(argKey));
       if (id !== seq.current) return;
       if (r?.clock) clock.sync(r.clock);
       setData(r);
@@ -51,7 +53,7 @@ export function useLive<T extends { clock?: ClockInfo }>(fn: string, args: Recor
       if (id !== seq.current) return;
       setError(e instanceof ApiError ? e : new ApiError('CLIENT'));
     }
-  }, [call, fn, argKey]);
+  }, [call, engine, anon, fn, argKey]);
 
   useEffect(() => {
     load();

@@ -18,6 +18,9 @@ const FIELD: Record<string, string> = {
   closure: '請選擇日期',
   roster: '名單最多 200 人，每個名字最多 20 字',
   items: '排程資料不正確，請重新整理後再試',
+  lesson: '請確認日期、時間、講師和類型（結束要晚於開始，講師最多 20 字）',
+  lesson_info: '標題需為 1–40 字，副標題最多 80 字，地點最多 200 字，公告最多 500 字',
+  lessons: '檔案格式不對：需要有 sessions 清單，最多 500 堂',
   kind: '不支援的操作',
 };
 
@@ -59,6 +62,10 @@ export function errorText(e: unknown, s?: Pick<Settings, 'lead_days' | 'cancel_h
       return FIELD[e.detail] ?? '輸入的資料不正確';
     case 'NAME_TAKEN':
       return e.detail ? `「${e.detail}」已經在其他組的名單，或是老師、助教的名字，名字不能重複` : '有名字和其他人重複了，請重新整理後再試';
+    case 'LESSON_CLASH':
+      return `和 ${e.detail} 的課時間重疊，同一時間只能排一堂課`;
+    case 'IMPORT_ROW':
+      return `第 ${e.detail} 堂的資料不正確，請確認日期、時間、講師和類型`;
     case 'NOT_FOUND':
       return '找不到這筆資料，可能已經被刪除或修改了';
     case 'SLOT_LATE':

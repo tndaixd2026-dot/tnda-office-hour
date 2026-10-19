@@ -281,3 +281,29 @@ export interface AdminConfig {
   blocks: Block[];
   closures: Closure[];
 }
+
+// TD 專班課表 (oh_lessons): public, same keys as schedule.json
+export interface Lesson {
+  id: number;
+  date: string;
+  start: string;
+  end: string;
+  teacher: string;
+  type: string;
+  title: string;
+  topic: string;
+}
+
+export interface LessonInfo {
+  title: string;
+  subtitle: string;
+  place: string;
+  note: string;
+}
+
+export interface LessonsState {
+  clock: ClockInfo;
+  info: LessonInfo;
+  types: string[];
+  lessons: Lesson[];
+}

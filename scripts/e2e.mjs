@@ -65,6 +65,7 @@ try {
     await page.goto(base, { waitUntil: 'networkidle' });
     await page.getByRole('heading', { name: '輸入你的名字' }).waitFor();
     check(await page.getByRole('button', { name: /試玩示範/ }).isVisible(), 'demo button missing');
+    check(await page.getByRole('link', { name: '查看 TD 專班課表' }).isVisible(), 'TD timetable link missing');
     // invite codes are one tap away, and back
     await page.getByRole('button', { name: '我有邀請代碼' }).click();
     await page.getByRole('heading', { name: '輸入邀請代碼' }).waitFor();
@@ -228,6 +229,82 @@ try {
     await page.getByRole('dialog').getByRole('button', { name: '關閉' }).click();
   });
 
+  // past weeks are folded away; open them so a lesson is found whatever today is
+  const unfoldPast = async () => {
+    const past = page.getByRole('button', { name: /顯示已結束的/ });
+    if (await past.count()) await past.click();
+  };
+
+  await run('admin edits the TD timetable', async () => {
+    await page.getByRole('complementary', { name: '管理選單' }).getByRole('link', { name: 'TD 課表' }).click();
+    await page.getByRole('heading', { name: '課程', exact: true }).waitFor();
+    // one class at a time: the clash is explained in the form, which stays open
+    await page.getByRole('button', { name: '新增一堂' }).click();
+    const d = page.getByRole('dialog', { name: '新增一堂課' });
+    await d.getByLabel('日期').fill('2027-01-02');
+    await d.getByLabel('開始').selectOption('17:00');
+    await d.getByLabel('講師').fill('哲瑜');
+    await d.getByRole('button', { name: '儲存' }).click();
+    await d.getByText('和 1/2 17:00 浡崴 的課時間重疊').waitFor();
+    await d.getByLabel('開始').selectOption('18:00');
+    check((await d.getByLabel('結束').inputValue()) === '19:00', 'moving the start should keep the length');
+    await d.getByLabel('標題').fill('E2E 加開');
+    await d.getByRole('button', { name: '儲存' }).click();
+    await page.getByText('已新增').waitFor();
+    await unfoldPast();
+    await page.getByRole('button', { name: /E2E 加開/ }).click();
+    const e = page.getByRole('dialog', { name: '編輯課程' });
+    await e.getByLabel('內容說明').fill('E2E 說明：帶筆電');
+    await e.getByRole('button', { name: '儲存' }).click();
+    await page.getByText('E2E 說明：帶筆電').waitFor();
+    await page.getByRole('button', { name: '編輯頁面資訊' }).click();
+    const info = page.getByRole('dialog', { name: '編輯頁面資訊' });
+    await info.getByLabel('公告').fill('E2E 公告：TD 改線上');
+    await info.getByRole('button', { name: '儲存' }).click();
+    await page.getByText('已更新頁面資訊').waitFor();
+  });
+
+  await run('the public TD page shows it, with filters and a month view', async () => {
+    await page.getByRole('link', { name: '打開公開頁' }).click();
+    await page.getByRole('heading', { name: '全部課程' }).waitFor();
+    await page.getByText('E2E 公告：TD 改線上').waitFor();
+    await unfoldPast();
+    await page.getByText('E2E 加開').waitFor();
+    const byTeacher = page.getByRole('group', { name: '依講師篩選' });
+    await byTeacher.getByRole('button', { name: '浡崴' }).click();
+    check((await page.locator('.ls-row .ls-who', { hasText: '浡崴' }).count()) === 0, 'a hidden teacher is still listed');
+    await byTeacher.getByRole('button', { name: '浡崴' }).click();
+    await page.getByRole('button', { name: '月曆', exact: true }).click();
+    await page.locator('.ls-cal').waitFor();
+    await page.locator('button.ls-day').first().click();
+    check((await page.locator('.ls-row').count()) > 0, 'the picked day should list its lessons');
+    await page.getByRole('button', { name: '清單', exact: true }).click();
+    await page.getByRole('button', { name: '訂閱行事曆' }).first().click();
+    await page.getByRole('dialog', { name: '訂閱行事曆' }).getByRole('button', { name: '完成' }).click();
+    await page.getByRole('link', { name: '回到後台' }).click();
+    await page.getByRole('heading', { name: '課程', exact: true }).waitFor();
+  });
+
+  await run('admin deletes a TD lesson', async () => {
+    await unfoldPast();
+    await page.getByRole('button', { name: /E2E 加開/ }).click();
+    await page.getByRole('dialog', { name: '編輯課程' }).getByRole('button', { name: '刪除' }).click();
+    await page.getByRole('dialog', { name: /刪除 1\/2 18:00 哲瑜 的課/ }).getByRole('button', { name: '刪除' }).click();
+    await page.getByText('已刪除').waitFor();
+    await page.getByRole('button', { name: /E2E 加開/ }).waitFor({ state: 'detached' });
+  });
+
+  await run('admin exports the TD timetable and imports it back', async () => {
+    const [file] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '下載 JSON' }).click()]);
+    const doc = JSON.parse(await (await import('node:fs/promises')).readFile(await file.path(), 'utf8'));
+    check(Array.isArray(doc.sessions) && doc.sessions.length > 80 && doc.sessions[0].date, 'export should be a schedule.json');
+    doc.sessions = doc.sessions.slice(0, 3);
+    await page.locator('input[type="file"]').setInputFiles({ name: 'td.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(doc)) });
+    await page.getByRole('dialog', { name: /用檔案裡的 3 堂取代/ }).getByRole('button', { name: '匯入' }).click();
+    await page.getByText('已匯入 3 堂').waitFor();
+    await page.getByText('共 3 堂').waitFor();
+  });
+
   await run('student sees the notice and the published session', async () => {
     await role(page, '學生');
     await page.getByText('E2E 公告').waitFor();
@@ -263,6 +340,15 @@ try {
     check(cols === 1, `expected 1 day column, got ${cols}`);
     const overflow = await m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     check(overflow <= 0, `admin page scrolls sideways by ${overflow}px`);
+  });
+  await run('mobile TD timetable fits the screen', async () => {
+    await m.page.evaluate(() => (location.hash = '#/td'));
+    await m.page.getByRole('heading', { name: '全部課程' }).waitFor();
+    for (const view of ['月曆', '清單']) {
+      await m.page.getByRole('button', { name: view, exact: true }).click();
+      const overflow = await m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      check(overflow <= 0, `TD ${view} scrolls sideways by ${overflow}px`);
+    }
   });
   await m.ctx.close();
 } catch (e) {

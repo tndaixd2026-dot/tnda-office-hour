@@ -52,6 +52,17 @@ const cal = await r.text();
 ok(r.ok && /text\/calendar/.test(r.headers.get('content-type') ?? '') && cal.startsWith('BEGIN:VCALENDAR') && !cal.includes('VEVENT'),
   'calendar feeds answer as text/calendar and reveal nothing for unknown links');
 
+r = await rpc('oh_lessons');
+const td = await r.json();
+ok(r.ok && Array.isArray(td.lessons) && td.info?.title, 'the TD timetable is public');
+
+r = await rpc('oh_admin_lesson_save', { p_token: 'x'.repeat(64), p: {} });
+ok(r.status === 400 && (await r.json()).message === 'AUTH', 'only admins can change the TD timetable');
+
+r = await fetch(`${url}/rest/v1/rpc/oh_lessons_calendar?apikey=${key}`);
+const tdCal = await r.text();
+ok(r.ok && /text\/calendar/.test(r.headers.get('content-type') ?? '') && tdCal.startsWith('BEGIN:VCALENDAR'), 'the TD calendar feed answers as text/calendar');
+
 const sb = createClient(url, key);
 const status = await new Promise((resolve) => {
   const t = setTimeout(() => resolve('TIMEOUT'), 15000);

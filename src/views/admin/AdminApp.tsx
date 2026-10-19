@@ -6,6 +6,7 @@ import { Icon, type IconName } from '../../ui/icons';
 import { BrandMark, Btn, LiveBadge } from '../../ui/kit';
 import { Board } from './Board';
 import { CalendarPage } from './CalendarPage';
+import { LessonsAdmin } from './LessonsAdmin';
 import { GroupsPage, TeachersPage } from './People';
 import { Overview } from './Overview';
 import { SettingsPage } from './SettingsPage';
@@ -16,6 +17,7 @@ const NAV: Array<{ id: string; label: string; icon: IconName }> = [
   { id: 'groups', label: '小組與邀請', icon: 'users' },
   { id: 'teachers', label: '老師', icon: 'user' },
   { id: 'calendar', label: '時段與週次', icon: 'calendar' },
+  { id: 'td', label: 'TD 課表', icon: 'layers' },
   { id: 'settings', label: '設定', icon: 'settings' },
 ];
 
@@ -41,6 +43,9 @@ export function AdminApp({ route }: { route: string[] }) {
       break;
     case 'settings':
       body = <SettingsPage />;
+      break;
+    case 'td':
+      body = <LessonsAdmin />;
       break;
     default:
       body = <Board weekParam={route[1] === 'board' && route[2] ? Number(route[2]) || null : null} />;

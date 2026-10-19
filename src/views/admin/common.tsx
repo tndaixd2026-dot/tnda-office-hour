@@ -44,6 +44,14 @@ export function eventText(e: ActivityEvent, groups: Array<{ id: number; no: numb
       return `${who} 更換了${g}的邀請代碼`;
     case 'config.group.roster':
       return `${who} 更新了${g}的學生名單`;
+    case 'config.lesson':
+      return `${who} 修改了 TD 課表 ${d.label ?? ''}`;
+    case 'config.lesson.deleted':
+      return `${who} 刪除了 TD 課表 ${d.label ?? ''}`;
+    case 'config.lessons.info':
+      return `${who} 修改了 TD 課表的頁面資訊`;
+    case 'config.lessons.imported':
+      return `${who} 匯入了 TD 課表（${d.count} 堂）`;
     default:
       if (e.kind.startsWith('config.')) return `${who} 修改了${e.kind.includes('teacher') ? '老師' : e.kind.includes('block') ? '開放時段' : e.kind.includes('closure') ? '休息日' : e.kind.includes('week') ? '週次' : e.kind.includes('admin') ? '助教' : '設定'}`;
       return `${who} ${e.kind}`;

@@ -8,6 +8,7 @@ import { Icon } from './ui/icons';
 import { Btn, Seg } from './ui/kit';
 import { Toasts } from './ui/toast';
 import { AdminApp } from './views/admin/AdminApp';
+import { LessonsPage } from './views/lessons/LessonsPage';
 import { StudentApp } from './views/student/StudentApp';
 import { TeacherApp } from './views/teacher/TeacherApp';
 import { Welcome } from './views/Welcome';
@@ -131,6 +132,9 @@ export function App() {
   let body;
   if (demoLoading || (r[0] === 'demo' && !demo)) {
     body = <DemoLoading progress={demoProgress} />;
+  } else if (r[0] === 'td') {
+    // the TD 專班 timetable is public: no sign-in needed
+    body = <LessonsPage />;
   } else if (!auth) {
     body = <Welcome key={r[1] ?? ''} initialCode={r[0] === 'join' ? r[1] : undefined} />;
   } else if (auth.session.role === 'admin') {

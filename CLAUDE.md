@@ -2,6 +2,8 @@
 
 TN0006「跨域數位製作實務」的 Office Hour 預約平台，名稱是「叁式 30 分鐘 一週三次」（`src/config.ts` 的 `APP_NAME`，另外寫在 `index.html` 和 `public/manifest.webmanifest`）。規則是每組每週最多 3 次、每次 30 分鐘、一天一次（設定裡的每週上限 3 格、每天上限 1 格）。學生以小組為單位勾選可以的時段，助教排程後發布，老師只看到排給自己的場次，所有畫面即時同步。使用說明、架構圖、展示腳本在 `README.md`。
 
+另外有一份 **TD 專班課表**（週三 VSAI 課程的助教課，和週四的跨域課不是同一批學生），公開頁在 `#/td`，不用登入；助教在後台「TD 課表」編輯、匯入或匯出（格式同原本獨立網站的 `schedule.json`）。資料在 `app.lessons`、`app.lesson_info`，API 是 `oh_lessons`（公開）、`oh_admin_lesson_*`、`oh_admin_lessons_*` 和公開行事曆 `oh_lessons_calendar`。同一時間只能有一堂課（`LESSON_CLASH`）。課表是公開的：薪資、時數、助教不能上課的日期、週三進階課不要放進去。學生名單（含個資）在 Notion，不要匯入這個平台。
+
 - Repo：`tndaixd2026-dot/tnda-office-hour`（public）
 - 網站：https://tndaixd2026-dot.github.io/tnda-office-hour/（示範模式：`#/demo`）
 - 資料庫：Supabase 組織「TNDA Office Hour」，東京區，專案 ref 在 `.env.production` 的網址裡
@@ -39,8 +41,8 @@ TN0006「跨域數位製作實務」的 Office Hour 預約平台，名稱是「�
 | `src/db/sql.ts` | 示範模式的 bootstrap 和 `MIGRATIONS` 清單 |
 | `src/api/` | `cloud.ts`（Supabase）和 `demo.ts`（PGlite）實作同一個 `Engine` 介面 |
 | `src/app/` | 登入狀態、hooks（`useLive` 負責即時重抓）、路由 |
-| `src/views/` | `student/`、`teacher/`、`admin/`、`Welcome.tsx` |
-| `src/lib/` | 時間計算、閃身步排程法（最大流）、ICS／CSV 匯出 |
+| `src/views/` | `student/`、`teacher/`、`admin/`（含 `LessonsAdmin.tsx`）、`lessons/`（TD 課表公開頁）、`Welcome.tsx` |
+| `src/lib/` | 時間計算、閃身步排程法（最大流）、ICS／CSV 匯出、TD 課表分組（`lessons.ts`） |
 | `src/ui/`、`src/styles/app.css` | 元件、對話框、圖示、toast、樣式 |
 | `tests/` | Vitest；資料庫規則用 PGlite 執行真正的 SQL |
 | `scripts/` | E2E、axe 掃描、雲端檢查、本機重置、學期重置 |
@@ -74,7 +76,7 @@ TN0006「跨域數位製作實務」的 Office Hour 預約平台，名稱是「�
 - **開學前**：
   1. 確認 Supabase 專案沒有暫停。如果暫停了，到後台按 Resume（免費）。
   2. 執行 `gh workflow enable keepalive.yml`。公開 repo 連續 60 天沒有 commit 時，GitHub 會停用這個排程，而且停用後不會自己恢復。
-  3. 新學期要清空紀錄時，**先問過使用者**，再執行 `scripts/fresh-start.sql`。執行後所有舊連結都會失效，學生名單也會清空，要請助教重新填。
+  3. 新學期要清空紀錄時，**先問過使用者**，再執行 `scripts/fresh-start.sql`。執行後所有舊連結都會失效，學生名單也會清空，要請助教重新填。TD 專班課表不會被清掉，要在後台「TD 課表」用匯入換掉。
 - Supabase 免費專案閒置 7 天就會暫停，學期中有人使用就不會。暫停前一週和暫停當下，Supabase 都會寄信給組織擁有者。
 
 ## 換電腦或換帳號

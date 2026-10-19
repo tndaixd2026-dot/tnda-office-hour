@@ -2361,6 +2361,241 @@ table.t tr.mine td {
   text-align: center;
 }
 
+/* ---------- TD 專班課表 ---------- */
+/* one colour per teacher; the name is always written next to it */
+.tc0 {
+  --tc: var(--info);
+}
+.tc1 {
+  --tc: var(--accent);
+}
+.tc2 {
+  --tc: var(--ok);
+}
+.tc3 {
+  --tc: var(--warn);
+}
+.ls-who {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+}
+.ls-who::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tc);
+}
+.li.past .ls-who::before {
+  opacity: 0.5;
+}
+.ls-meta {
+  gap: 4px 12px;
+  font-size: 14px;
+}
+.ls-title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.ls-title.muted {
+  font-weight: 400;
+}
+.ls-topic {
+  display: block;
+}
+.li.ls-live {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.ls-wh {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  font-size: 15px;
+  font-weight: 800;
+}
+.ls-tools .seg {
+  width: auto;
+}
+.ls-tools .seg button {
+  min-height: 28px;
+  padding: 2px 14px;
+}
+.ls-filters {
+  gap: 10px 24px;
+}
+.ls-tg {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 14px 0 12px;
+  border-radius: 99px;
+  border: 1px solid var(--line-2);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+.ls-tg.plain {
+  --tc: var(--ink-2);
+}
+.ls-tg::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--tc);
+}
+.ls-tg:hover {
+  border-color: var(--ink);
+}
+.ls-tg[aria-pressed='false'] {
+  background: transparent;
+  color: var(--muted);
+  border-style: dashed;
+}
+.ls-tg[aria-pressed='false']::before {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--muted);
+}
+/* admin: the whole row opens the editor */
+.ls-edit {
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+}
+.list > * + .ls-edit {
+  border-top: 1px solid var(--line);
+}
+.ls-edit:hover {
+  background: var(--surface-2);
+}
+.ls-edit:focus-visible,
+.ls-day:focus-visible {
+  outline-offset: -3px;
+}
+.ls-edit .ls-pen {
+  flex: 0 0 auto;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* month */
+.ls-cal {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  overflow: hidden;
+}
+.ls-dh {
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+}
+.ls-day {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  min-width: 0;
+  min-height: 92px;
+  padding: 6px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  background: transparent;
+  text-align: left;
+}
+.ls-day:nth-child(7n) {
+  border-right: 0;
+}
+.ls-day.out {
+  background: var(--bg);
+}
+button.ls-day:hover {
+  background: var(--surface-2);
+}
+.ls-day[aria-pressed='true'] {
+  box-shadow: inset 0 0 0 2px var(--ink);
+}
+.ls-day .n {
+  align-self: flex-start;
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 5px;
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.ls-day.none .n {
+  color: var(--muted);
+  font-weight: 400;
+}
+.ls-day.today .n {
+  background: var(--ink);
+  color: var(--bg);
+}
+.ls-m {
+  display: block;
+  padding: 1px 6px;
+  border-left: 3px solid var(--tc);
+  border-radius: 3px;
+  background: var(--surface-2);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ls-m .t {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-2);
+}
+@media (max-width: 640px) {
+  .ls-dh {
+    padding: 6px 0;
+    text-align: center;
+  }
+  .ls-day {
+    min-height: 60px;
+    padding: 4px 3px;
+  }
+  .ls-day .n {
+    align-self: center;
+  }
+  /* phones: each lesson is a coloured bar; the text stays for screen readers */
+  .ls-m {
+    height: 6px;
+    padding: 0;
+    border-left: 0;
+    border-radius: 99px;
+    background: var(--tc);
+  }
+  .ls-m .t,
+  .ls-m .nm {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+}
+
 /* demo bar */
 .demobar {
   --demo: #9f3209;
