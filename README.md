@@ -140,7 +140,7 @@ psql "<資料庫連線字串>" -f scripts/fresh-start.sql
 
 1. 用要寄信的 Gmail 帳號開啟兩步驟驗證，再到 <https://myaccount.google.com/apppasswords> 建立一組「應用程式密碼」。
 2. GitHub repo → Settings → Secrets and variables → Actions，新增 `GMAIL_USER`（Gmail 地址）和 `GMAIL_APP_PASSWORD`（16 個字母的應用程式密碼）。
-3. Actions →「Weekly email」→ Run workflow，選 `test` 把這週的信（三位老師的場次）只寄給寄件的 Gmail 自己，不會寄給任何收件人，也不影響週日和週一的正式寄送。選 `preview` 是寄預覽到助教信箱；也可以勾「只列出要寄的信」先看會寄給幾個人。
+3. Actions →「Weekly email」→ Run workflow，選 `test` 只寄一封測試信給寄件的 Gmail 自己（最近一週有場次的信，三位老師都有），不會寄給任何收件人，也不影響週日和週一的正式寄送。選 `preview` 是寄預覽到助教信箱；也可以勾「只列出要寄的信」先看會寄給幾個人。
 
 紀錄是公開的（公開 repo），所以只印主旨和數量，不印 Email。
 

@@ -2,8 +2,8 @@
 //
 //   KIND=weekly   each recipient gets this week's sessions (Monday)
 //   KIND=preview  the admins' mailbox gets all of it first (Sunday)
-//   KIND=test     this week's email with every PM's sessions, only to the
-//                 sending account itself; nothing is logged
+//   KIND=test     the email with every PM's sessions for the nearest week
+//                 that has some, only to the sending account; nothing is logged
 //   SUPABASE_DB_PASSWORD, POOLER_HOST   or DATABASE_URL directly
 //   GMAIL_USER, GMAIL_APP_PASSWORD      the account that sends
 //   SEND_AT=09:00  wait for this time in Taipei first (at most an hour)
@@ -71,14 +71,16 @@ if (process.env.SEND_AT && !dry) {
 
 const db = new pg.Client({ connectionString: url, ssl: /localhost|127\.0\.0\.1/.test(url) ? false : { rejectUnauthorized: false } });
 await db.connect();
-// Monday's email (and a test) is about the week it starts; Sunday's preview, the coming one
-const week = (
-  await db.query(
-    `select (case when $1 <> 'preview' then app.today() - (extract(isodow from app.today())::int - 1)
-                  else app.mail_week(app.today()) end)::text as w`,
-    [kind],
-  )
-).rows[0].w;
+// Monday's email is about the week it starts; Sunday's preview, the coming
+// one; a test, the first week from this one on with sessions (or the last)
+const from = {
+  weekly: 'app.today()',
+  preview: 'app.mail_week(app.today())',
+  test: `coalesce((select min(a.d) from app.appointments a where a.status = 'confirmed'
+                     and a.d >= app.today() - (extract(isodow from app.today())::int - 1)),
+                  (select max(a.d) from app.appointments a where a.status = 'confirmed'), app.today())`,
+}[kind];
+const week = (await db.query(`select (x - (extract(isodow from x)::int - 1))::text as w from (select ${from} as x) s`)).rows[0].w;
 const urls = [site, env.VITE_SUPABASE_URL, env.VITE_SUPABASE_KEY];
 let list;
 if (kind === 'test') {
