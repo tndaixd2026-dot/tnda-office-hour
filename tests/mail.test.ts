@@ -116,6 +116,7 @@ describe('weekly email', () => {
     expect(p.html).toContain('這是預覽');
     expect(p.html).toContain('prolong@example.com（Prolong）：【Office Hour】Prolong 本週 1 場（10/19–10/25）');
     expect(p.html).toContain('第 1 組「南宜到達的斜上方」');
+    expect(p.html).toContain('</ul><div style="margin-top:8px;">要調整場次');
     // with no admins' mailbox it goes to the sending account
     await db.call('oh_admin_mail_save', { p_token: admin, p_kind: 'settings', p: { ta_email: '' } });
     expect((await outbox('preview'))[0].to).toBe('sender@example.com');
