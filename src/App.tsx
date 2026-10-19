@@ -134,7 +134,7 @@ export function App() {
     body = <DemoLoading progress={demoProgress} />;
   } else if (r[0] === 'td') {
     // the TD 專班 timetable is public: no sign-in needed
-    body = <LessonsPage />;
+    body = <LessonsPage who={r[1]} />;
   } else if (!auth) {
     body = <Welcome key={r[1] ?? ''} initialCode={r[0] === 'join' ? r[1] : undefined} />;
   } else if (auth.session.role === 'admin') {

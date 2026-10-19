@@ -270,10 +270,24 @@ try {
     await page.getByText('E2E 公告：TD 改線上').waitFor();
     await unfoldPast();
     await page.getByText('E2E 加開').waitFor();
-    const byTeacher = page.getByRole('group', { name: '依講師篩選' });
-    await byTeacher.getByRole('button', { name: '浡崴' }).click();
-    check((await page.locator('.ls-row .ls-who', { hasText: '浡崴' }).count()) === 0, 'a hidden teacher is still listed');
-    await byTeacher.getByRole('button', { name: '浡崴' }).click();
+    // one teacher only, and the address says so (so it can be shared)
+    const byTeacher = page.getByRole('group', { name: '只看哪位講師' });
+    await byTeacher.getByRole('button', { name: '哲瑜' }).click();
+    check((await page.locator('.ls-row .ls-who', { hasText: '浡崴' }).count()) === 0, 'another teacher is still listed');
+    check(decodeURIComponent(await page.evaluate(() => location.hash)) === '#/td/哲瑜', 'the address should name the teacher');
+    // the week grid opens a lesson with an add-to-Google-Calendar link
+    await page.getByRole('button', { name: '週曆', exact: true }).click();
+    await page.locator('.ls-wk').waitFor();
+    const lastWeek = page.getByRole('button', { name: '下一週' });
+    while ((await page.locator('.ls-ev').count()) === 0 && (await lastWeek.isEnabled())) await lastWeek.click();
+    await page.locator('.ls-ev').first().click();
+    const google = await page.getByRole('dialog').getByRole('link', { name: '加到 Google 日曆' }).getAttribute('href');
+    check(google?.startsWith('https://calendar.google.com/calendar/render?action=TEMPLATE'), 'a lesson should link to Google Calendar');
+    await page.getByRole('dialog').getByRole('button', { name: '完成' }).click();
+    await byTeacher.getByRole('button', { name: '全部' }).click();
+    await page.getByRole('button', { name: '依講師', exact: true }).click();
+    await page.getByRole('heading', { name: /^浡崴/ }).waitFor();
+    await page.getByRole('heading', { name: /^哲瑜/ }).waitFor();
     await page.getByRole('button', { name: '月曆', exact: true }).click();
     await page.locator('.ls-cal').waitFor();
     await page.locator('button.ls-day').first().click();
@@ -344,7 +358,7 @@ try {
   await run('mobile TD timetable fits the screen', async () => {
     await m.page.evaluate(() => (location.hash = '#/td'));
     await m.page.getByRole('heading', { name: '全部課程' }).waitFor();
-    for (const view of ['月曆', '清單']) {
+    for (const view of ['週曆', '月曆', '依講師', '清單']) {
       await m.page.getByRole('button', { name: view, exact: true }).click();
       const overflow = await m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
       check(overflow <= 0, `TD ${view} scrolls sideways by ${overflow}px`);

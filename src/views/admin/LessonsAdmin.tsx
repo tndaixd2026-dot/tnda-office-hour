@@ -170,7 +170,7 @@ export function LessonsAdmin() {
                 </h3>
                 <div class="list">
                   {w.lessons.map((l) => (
-                    <LessonRow key={l.id} l={l} teachers={teachers} today={clock.today} phase={l.date < clock.today ? 'past' : 'later'} onEdit={() => edit(l)} />
+                    <LessonRow key={l.id} l={l} teachers={teachers} today={clock.today} phase={l.date < clock.today ? 'past' : 'later'} onClick={() => edit(l)} />
                   ))}
                 </div>
               </div>

@@ -1,29 +1,32 @@
 import type { Lesson } from '../../api/types';
 import { teacherClass } from '../../lib/lessons';
 import { DOW, isoDow, md, relativeDay } from '../../lib/time';
-import { Icon } from '../../ui/icons';
+import { Icon, type IconName } from '../../ui/icons';
 
 export type LessonPhase = 'past' | 'live' | 'later';
 
 /**
- * One lesson in a list. With `onEdit` the whole row is a button (admin);
- * everything inside is phrasing content so that stays valid HTML.
+ * One lesson in a list. With `onClick` the whole row is a button (edit in
+ * the admin, details on the public page); everything inside is phrasing
+ * content so that stays valid HTML.
  */
 export function LessonRow({
   l,
   teachers,
   today,
   phase = 'later',
-  onEdit,
+  onClick,
+  icon = 'edit',
 }: {
   l: Lesson;
   teachers: string[];
   today: string;
   phase?: LessonPhase;
-  onEdit?: () => void;
+  onClick?: () => void;
+  icon?: IconName;
 }) {
   const rel = relativeDay(l.date, today);
-  const cls = ['li top ls-row', teacherClass(teachers, l.teacher), phase === 'past' && 'past', phase === 'live' && 'ls-live', onEdit && 'ls-edit']
+  const cls = ['li top ls-row', teacherClass(teachers, l.teacher), phase === 'past' && 'past', phase === 'live' && 'ls-live', onClick && 'ls-edit']
     .filter(Boolean)
     .join(' ');
   const body = (
@@ -44,11 +47,11 @@ export function LessonRow({
         <span class={`ls-title ${l.title ? '' : 'muted'}`}>{l.title || '標題待定'}</span>
         {l.topic && <span class="small muted pre ls-topic">{l.topic}</span>}
       </span>
-      {onEdit && <Icon name="edit" class="ls-pen" />}
+      {onClick && <Icon name={icon} class="ls-pen" />}
     </>
   );
-  return onEdit ? (
-    <button type="button" class={cls} onClick={onEdit}>
+  return onClick ? (
+    <button type="button" class={cls} onClick={onClick}>
       {body}
     </button>
   ) : (

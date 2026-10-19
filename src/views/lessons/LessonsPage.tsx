@@ -1,23 +1,36 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
-import type { Lesson, LessonsState } from '../../api/types';
-import { clock, useLive, useTick } from '../../app/hooks';
+import type { Lesson, LessonInfo, LessonsState } from '../../api/types';
+import { clock, useLive, useMedia, useTick } from '../../app/hooks';
 import { useApp } from '../../app/session';
 import { local } from '../../app/store';
 import { HAS_CLOUD, SUPABASE_KEY, SUPABASE_URL } from '../../config';
 import { downloadIcs } from '../../lib/files';
-import { byWeek, lessonEnd, lessonStart, monday, monthDays, nextLesson, shiftMonth, teacherClass, teacherList } from '../../lib/lessons';
-import { addDays, dayLabel, DOW, DOW_SHORT, isoDow, md, minutes, relativeDay, tzNote, untilText } from '../../lib/time';
+import {
+  byWeek,
+  googleCalendarUrl,
+  hourRange,
+  lessonEnd,
+  lessonStart,
+  monday,
+  monthDays,
+  nextLesson,
+  shiftMonth,
+  teacherClass,
+  teacherList,
+} from '../../lib/lessons';
+import { addDays, dayLabel, daysBetween, DOW, DOW_SHORT, isoDow, md, minutes, relativeDay, tzNote, untilText } from '../../lib/time';
 import { openDialog } from '../../ui/dialog';
 import { Icon } from '../../ui/icons';
 import { Btn, CopyBtn, Empty, LiveBadge, Loading, Place, Seg } from '../../ui/kit';
 import { ErrorState } from '../student/StudentApp';
 import { LessonRow, type LessonPhase } from './parts';
 
-type View = 'list' | 'month';
+type View = 'list' | 'week' | 'month' | 'teacher';
+const VIEWS: View[] = ['list', 'week', 'month', 'teacher'];
 const VIEW_KEY = 'oh.td.view';
 
-/** The TD 專班 timetable at #/td: public, no sign-in, live. */
-export function LessonsPage() {
+/** The TD 專班 timetable at #/td (or #/td/<teacher>): public, no sign-in, live. */
+export function LessonsPage({ who }: { who?: string }) {
   const { auth } = useApp();
   const { data, error, reload } = useLive<LessonsState>('oh_lessons', {}, true);
   const title = data?.info.title;
@@ -51,7 +64,7 @@ export function LessonsPage() {
           )}
         </div>
       </header>
-      {data ? <LessonsHome st={data} /> : error ? <ErrorState onRetry={reload} /> : <Loading />}
+      {data ? <LessonsHome st={data} initialWho={who} /> : error ? <ErrorState onRetry={reload} /> : <Loading />}
     </>
   );
 }
@@ -61,23 +74,40 @@ function phaseOf(l: Lesson, now: number, tz: string): LessonPhase {
   return lessonStart(l, tz) <= now ? 'live' : 'later';
 }
 
-function LessonsHome({ st }: { st: LessonsState }) {
+/** Keeps the chosen teacher in the address, so a one-teacher view can be shared. */
+function rememberTeacher(who: string) {
+  try {
+    history.replaceState(null, '', who ? `#/td/${encodeURIComponent(who)}` : '#/td');
+  } catch {
+    /* sandboxed pages cannot rewrite the address */
+  }
+}
+
+function LessonsHome({ st, initialWho }: { st: LessonsState; initialWho?: string }) {
   const now = useTick();
   const tz = st.clock.tz;
   const teachers = useMemo(() => teacherList(st.lessons), [st.lessons]);
-  const [view, setView] = useState<View>(() => (local.get<View>(VIEW_KEY) === 'month' ? 'month' : 'list'));
-  const [hideTeachers, setHideTeachers] = useState<string[]>([]);
-  const [hideTypes, setHideTypes] = useState<string[]>([]);
-  const shown = st.lessons.filter((l) => !hideTeachers.includes(l.teacher) && !hideTypes.includes(l.type));
-  const next = nextLesson(st.lessons, now, tz);
+  const [view, setView] = useState<View>(() => {
+    const v = local.get<View>(VIEW_KEY);
+    return v && VIEWS.includes(v) ? v : 'list';
+  });
+  const [who, setWho] = useState(initialWho && teachers.includes(initialWho) ? initialWho : '');
+  const [kind, setKind] = useState('');
+  const shown = st.lessons.filter((l) => (!who || l.teacher === who) && (!kind || l.type === kind));
+  const next = nextLesson(shown, now, tz);
   const first = st.lessons[0];
   const last = st.lessons[st.lessons.length - 1];
-  const subscribe = () => openLessonsCalendar(st);
+  const subscribe = () => openLessonsCalendar(st, who);
+  const open = (l: Lesson) => openLesson(l, st, teachers);
   const pick = (v: View) => {
     setView(v);
     local.set(VIEW_KEY, v);
   };
-  const toggle = (list: string[], set: (l: string[]) => void, x: string) => set(list.includes(x) ? list.filter((y) => y !== x) : [...list, x]);
+  const pickWho = (t: string) => {
+    setWho(t);
+    rememberTeacher(t);
+  };
+  const props: ViewProps = { lessons: shown, all: st.lessons, teachers, now, tz, open };
 
   return (
     <main class="page enter">
@@ -109,7 +139,7 @@ function LessonsHome({ st }: { st: LessonsState }) {
       ) : (
         st.lessons.length > 0 && (
           <div class="hero calm">
-            <p class="title-m">這學期的課都上完了</p>
+            <p class="title-m">{who || kind ? '符合篩選的課都上完了' : '這學期的課都上完了'}</p>
           </div>
         )
       )}
@@ -124,7 +154,9 @@ function LessonsHome({ st }: { st: LessonsState }) {
               onChange={pick}
               options={[
                 { value: 'list', label: '清單' },
+                { value: 'week', label: '週曆' },
                 { value: 'month', label: '月曆' },
+                { value: 'teacher', label: '依講師' },
               ]}
             />
             <Btn size="sm" icon="calendar" onClick={subscribe}>
@@ -135,28 +167,32 @@ function LessonsHome({ st }: { st: LessonsState }) {
 
         {(teachers.length > 1 || st.types.length > 1) && (
           <div class="row wrap ls-filters">
-            <div class="row wrap" role="group" aria-label="依講師篩選">
-              <span class="tiny muted">講師</span>
-              {teachers.map((t) => (
-                <button
-                  type="button"
-                  key={t}
-                  class={`ls-tg ${teacherClass(teachers, t)}`}
-                  aria-pressed={!hideTeachers.includes(t)}
-                  onClick={() => toggle(hideTeachers, setHideTeachers, t)}
-                >
-                  {t}
+            {teachers.length > 1 && (
+              <div class="row wrap" role="group" aria-label="只看哪位講師">
+                <span class="tiny muted">講師</span>
+                <button type="button" class="ls-tg plain" aria-pressed={!who} onClick={() => pickWho('')}>
+                  全部
                 </button>
-              ))}
-            </div>
-            <div class="row wrap" role="group" aria-label="依類型篩選">
-              <span class="tiny muted">類型</span>
-              {st.types.map((t) => (
-                <button type="button" key={t} class="ls-tg plain" aria-pressed={!hideTypes.includes(t)} onClick={() => toggle(hideTypes, setHideTypes, t)}>
-                  {t}
+                {teachers.map((t) => (
+                  <button type="button" key={t} class={`ls-tg ${teacherClass(teachers, t)}`} aria-pressed={who === t} onClick={() => pickWho(t)}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+            )}
+            {st.types.length > 1 && (
+              <div class="row wrap" role="group" aria-label="只看哪種類型">
+                <span class="tiny muted">類型</span>
+                <button type="button" class="ls-tg plain" aria-pressed={!kind} onClick={() => setKind('')}>
+                  全部
                 </button>
-              ))}
-            </div>
+                {st.types.map((t) => (
+                  <button type="button" key={t} class="ls-tg plain" aria-pressed={kind === t} onClick={() => setKind(t)}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -166,12 +202,16 @@ function LessonsHome({ st }: { st: LessonsState }) {
           </Empty>
         ) : shown.length === 0 ? (
           <Empty icon="calendar" title="沒有符合篩選的課">
-            點上面的講師或類型，把它們重新打開
+            把講師或類型換回「全部」看看
           </Empty>
-        ) : view === 'list' ? (
-          <ListView lessons={shown} all={st.lessons} teachers={teachers} now={now} tz={tz} />
+        ) : view === 'week' ? (
+          <WeekView {...props} />
+        ) : view === 'month' ? (
+          <MonthView {...props} />
+        ) : view === 'teacher' ? (
+          <TeacherView {...props} />
         ) : (
-          <MonthView lessons={shown} all={st.lessons} teachers={teachers} now={now} tz={tz} />
+          <ListView {...props} />
         )}
       </section>
     </main>
@@ -236,9 +276,20 @@ interface ViewProps {
   teachers: string[];
   now: number;
   tz: string;
+  open: (l: Lesson) => void;
 }
 
-function ListView({ lessons, all, teachers, now, tz }: ViewProps) {
+function Rows({ list, teachers, now, tz, open }: { list: Lesson[] } & Omit<ViewProps, 'lessons' | 'all'>) {
+  return (
+    <div class="list">
+      {list.map((l) => (
+        <LessonRow key={l.id} l={l} teachers={teachers} today={clock.today} phase={phaseOf(l, now, tz)} icon="right" onClick={() => open(l)} />
+      ))}
+    </div>
+  );
+}
+
+function ListView({ lessons, all, ...rest }: ViewProps) {
   const [showPast, setShowPast] = useState(false);
   const thisWeek = monday(clock.today);
   const weeks = byWeek(lessons, all[0]?.date);
@@ -262,18 +313,120 @@ function ListView({ lessons, all, teachers, now, tz }: ViewProps) {
             <span class="small muted">{w.lessons.length} 堂</span>
             {w.start === thisWeek && <span class="chip accent">本週</span>}
           </h3>
-          <div class="list">
-            {w.lessons.map((l) => (
-              <LessonRow key={l.id} l={l} teachers={teachers} today={clock.today} phase={phaseOf(l, now, tz)} />
-            ))}
-          </div>
+          <Rows list={w.lessons} {...rest} />
         </section>
       ))}
     </div>
   );
 }
 
-function MonthView({ lessons, all, teachers, now, tz }: ViewProps) {
+/** The week of today, kept within the semester. */
+function startWeek(all: Lesson[]): string {
+  const today = clock.today;
+  const first = all[0]?.date ?? today;
+  const last = all[all.length - 1]?.date ?? today;
+  return monday(today < first ? first : today > last ? last : today);
+}
+
+function WeekView({ lessons, all, teachers, now, tz, open }: ViewProps) {
+  const phone = useMedia('(max-width: 640px)');
+  const [start, setStart] = useState(() => startWeek(all));
+  const firstWeek = monday(all[0]?.date ?? clock.today);
+  const lastWeek = monday(all[all.length - 1]?.date ?? clock.today);
+  const no = daysBetween(firstWeek, start) / 7 + 1;
+  const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
+  const inWeek = lessons.filter((l) => l.date >= start && l.date <= days[6]);
+  const [h0, h1] = hourRange(all);
+  const thisWeek = monday(clock.today);
+
+  return (
+    <div class="stack">
+      <div class="row between wrap">
+        <div class="row">
+          <Btn size="sm" icon="left" aria-label="上一週" disabled={start <= firstWeek} onClick={() => setStart(addDays(start, -7))} />
+          <Btn size="sm" icon="right" aria-label="下一週" disabled={start >= lastWeek} onClick={() => setStart(addDays(start, 7))} />
+          {start !== thisWeek && thisWeek >= firstWeek && thisWeek <= lastWeek && (
+            <Btn size="sm" variant="ghost" onClick={() => setStart(thisWeek)}>
+              回到本週
+            </Btn>
+          )}
+        </div>
+        <h3 class="title-s" aria-live="polite">
+          第 {no} 週 <span class="mono muted small">{md(start)}–{md(days[6])}</span>
+          <span class="muted small"> {inWeek.length} 堂</span>
+        </h3>
+      </div>
+
+      {phone ? (
+        inWeek.length === 0 ? (
+          <p class="muted small">這週沒有課</p>
+        ) : (
+          <div class="stack">
+            {days
+              .filter((d) => inWeek.some((l) => l.date === d))
+              .map((d) => (
+                <div class="stack tight" key={d}>
+                  <h4 class="small" style={{ fontWeight: 700 }}>
+                    {relativeDay(d, clock.today) ? `${relativeDay(d, clock.today)}・` : ''}
+                    {dayLabel(d)}
+                  </h4>
+                  <Rows list={inWeek.filter((l) => l.date === d)} teachers={teachers} now={now} tz={tz} open={open} />
+                </div>
+              ))}
+          </div>
+        )
+      ) : (
+        <div class="ls-wk-scroll">
+          <div class="ls-wk" style={{ '--rows': String(h1 - h0) }}>
+            <span class="ls-wk-corner" aria-hidden="true" />
+            {days.map((d) => (
+              <span class={`ls-wk-dh ${d === clock.today ? 'today' : ''}`} key={d} aria-hidden="true">
+                <span>{DOW[isoDow(d)]}</span>
+                <b>{md(d)}</b>
+              </span>
+            ))}
+            <span class="ls-wk-hours" aria-hidden="true">
+              {Array.from({ length: h1 - h0 }, (_, i) => (
+                <span key={i}>{`${String(h0 + i).padStart(2, '0')}:00`}</span>
+              ))}
+            </span>
+            {days.map((d) => (
+              <div class={`ls-wk-col ${d === clock.today ? 'today' : ''}`} key={d}>
+                {inWeek
+                  .filter((l) => l.date === d)
+                  .map((l) => {
+                    const top = (minutes(l.start) - h0 * 60) / 60;
+                    const height = (minutes(l.end) - minutes(l.start)) / 60;
+                    const phase = phaseOf(l, now, tz);
+                    return (
+                      <button
+                        type="button"
+                        key={l.id}
+                        class={`ls-ev ${teacherClass(teachers, l.teacher)} ${phase}`}
+                        style={{ top: `calc(${top} * var(--hh))`, height: `calc(${height} * var(--hh) - 3px)` }}
+                        onClick={() => open(l)}
+                      >
+                        <span class="sr-only">{dayLabel(d)} </span>
+                        <span class="t">
+                          {l.start}–{l.end}
+                        </span>
+                        <span class="n">
+                          {l.teacher} · {l.type}
+                        </span>
+                        {l.title && <span class="ttl">{l.title}</span>}
+                      </button>
+                    );
+                  })}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MonthView({ lessons, all, teachers, now, tz, open }: ViewProps) {
   const today = clock.today;
   const first = all[0]?.date ?? today;
   const last = all[all.length - 1]?.date ?? today;
@@ -340,51 +493,118 @@ function MonthView({ lessons, all, teachers, now, tz }: ViewProps) {
         <h3 class="title-s">
           {md(sel)}（{DOW[isoDow(sel)]}）
         </h3>
-        {picked.length ? (
-          <div class="list">
-            {picked.map((l) => (
-              <LessonRow key={l.id} l={l} teachers={teachers} today={today} phase={phaseOf(l, now, tz)} />
-            ))}
-          </div>
-        ) : (
-          <p class="muted small">這天沒有課</p>
-        )}
+        {picked.length ? <Rows list={picked} teachers={teachers} now={now} tz={tz} open={open} /> : <p class="muted small">這天沒有課</p>}
       </div>
     </div>
   );
 }
 
+/** One column per teacher: how many lessons of each type, and what is coming up. */
+function TeacherView({ lessons, teachers, now, tz, open }: ViewProps) {
+  const [showPast, setShowPast] = useState(false);
+  const who = teachers.filter((t) => lessons.some((l) => l.teacher === t));
+  return (
+    <div class="stack">
+      <button type="button" class="link-btn small" style={{ justifySelf: 'start' }} aria-expanded={showPast} onClick={() => setShowPast(!showPast)}>
+        {showPast ? '只看還沒上的課' : '也顯示已結束的課'}
+      </button>
+      <div class="ls-teachers">
+        {who.map((t) => {
+          const mine = lessons.filter((l) => l.teacher === t);
+          const ahead = mine.filter((l) => lessonEnd(l, tz) > now);
+          const list = showPast ? mine : ahead;
+          const counts = [...new Set(mine.map((l) => l.type))].map((k) => `${k} ${mine.filter((l) => l.type === k).length}`);
+          return (
+            <section class="stack tight" key={t} aria-labelledby={`ls-t-${t}`}>
+              <h3 class={`ls-wh ${teacherClass(teachers, t)}`} id={`ls-t-${t}`}>
+                <span class="ls-who">{t}</span>
+                <span class="small muted">
+                  共 {mine.length} 堂 還有 {ahead.length} 堂
+                </span>
+              </h3>
+              <p class="tiny muted">{counts.join('　')}</p>
+              {list.length ? <Rows list={list} teachers={teachers} now={now} tz={tz} open={open} /> : <p class="muted small">沒有還沒上的課</p>}
+            </section>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ---------- one lesson ----------
+function openLesson(l: Lesson, st: LessonsState, teachers: string[]) {
+  openDialog(`${md(l.date)} ${l.start} ${l.teacher}`, (close) => <LessonDetail l={l} info={st.info} tz={st.clock.tz} teachers={teachers} close={close} />);
+}
+
+function LessonDetail({ l, info, tz, teachers, close }: { l: Lesson; info: LessonInfo; tz: string; teachers: string[]; close: () => void }) {
+  return (
+    <>
+      <div class="stack tight">
+        <p class="eyebrow">
+          {dayLabel(l.date)} {l.start}–{l.end}
+        </p>
+        <h2 class={l.title ? '' : 'muted'}>{l.title || '標題待定'}</h2>
+      </div>
+      <div class={`row wrap ${teacherClass(teachers, l.teacher)}`}>
+        <span class="ls-who">{l.teacher}</span>
+        <span class="chip">{l.type}</span>
+      </div>
+      {l.topic && <p class="pre">{l.topic}</p>}
+      {info.place && (
+        <p class="small row" style={{ gap: '6px' }}>
+          <Icon name="pin" size={16} />
+          <Place value={info.place} />
+        </p>
+      )}
+      <div class="actions">
+        <a class="btn" href={googleCalendarUrl(l, tz, info.place)} target="_blank" rel="noopener noreferrer">
+          <Icon name="calendar" /> 加到 Google 日曆
+        </a>
+        <button type="button" class="btn primary" onClick={close}>
+          完成
+        </button>
+      </div>
+    </>
+  );
+}
+
 // ---------- calendar subscription ----------
-function feedUrl() {
+function feedUrl(teacher: string) {
   const u = new URL(`${SUPABASE_URL.replace(/\/$/, '')}/rest/v1/rpc/oh_lessons_calendar`);
   u.searchParams.set('apikey', SUPABASE_KEY);
+  if (teacher) u.searchParams.set('p_teacher', teacher);
   return u.toString();
 }
 
-export function openLessonsCalendar(st: LessonsState) {
-  openDialog('訂閱行事曆', (close) => <LessonsCalendar st={st} close={close} />, { wide: 'wide' });
+export function openLessonsCalendar(st: LessonsState, who = '') {
+  openDialog('訂閱行事曆', (close) => <LessonsCalendar st={st} initial={who} close={close} />, { wide: 'wide' });
 }
 
-function LessonsCalendar({ st, close }: { st: LessonsState; close: () => void }) {
+function LessonsCalendar({ st, initial, close }: { st: LessonsState; initial: string; close: () => void }) {
   const { engine } = useApp();
+  const teachers = teacherList(st.lessons);
+  const [who, setWho] = useState(initial);
   const demo = engine?.mode === 'demo' || !HAS_CLOUD;
-  const url = demo ? '' : feedUrl();
+  const url = demo ? '' : feedUrl(who);
   const webcal = url.replace(/^https:/, 'webcal:');
   const google = `https://calendar.google.com/calendar/render?cid=${encodeURIComponent(webcal)}`;
   const download = () =>
     downloadIcs(
-      'td-lessons.ics',
-      st.lessons.map((l) => ({
-        uid: `td-${l.id}@tnda-office-hour`,
-        d: l.date,
-        t: l.start,
-        minutes: minutes(l.end) - minutes(l.start),
-        tz: st.clock.tz,
-        title: `TD ${l.type} · ${l.teacher}${l.title ? `｜${l.title}` : ''}`,
-        location: st.info.place,
-        description: [l.title, l.topic, `講師：${l.teacher}　類型：${l.type}`].filter(Boolean).join('\n\n'),
-      })),
-      st.info.title,
+      who ? `td-lessons-${who}.ics` : 'td-lessons.ics',
+      st.lessons
+        .filter((l) => !who || l.teacher === who)
+        .map((l) => ({
+          uid: `td-${l.id}@tnda-office-hour`,
+          d: l.date,
+          t: l.start,
+          minutes: minutes(l.end) - minutes(l.start),
+          tz: st.clock.tz,
+          title: `TD ${l.type} · ${l.teacher}${l.title ? `｜${l.title}` : ''}`,
+          location: st.info.place,
+          description: [l.title, l.topic, `講師：${l.teacher}　類型：${l.type}`].filter(Boolean).join('\n\n'),
+        })),
+      who ? `${st.info.title} · ${who}` : st.info.title,
     );
 
   return (
@@ -393,6 +613,17 @@ function LessonsCalendar({ st, close }: { st: LessonsState; close: () => void })
         <h2>訂閱行事曆</h2>
         <p class="muted small">訂閱一次，之後加課、改時間或補上標題，行事曆都會自動更新，每堂開始前 15 分鐘提醒</p>
       </div>
+      {teachers.length > 1 && (
+        <div class="field">
+          <span class="label">要訂閱哪些課</span>
+          <Seg
+            label="要訂閱哪些課"
+            value={who}
+            onChange={setWho}
+            options={[{ value: '', label: '全部' }, ...teachers.map((t) => ({ value: t, label: `只有${t}` }))]}
+          />
+        </div>
+      )}
       {demo ? (
         <div class="notice info">
           <Icon name="info" />

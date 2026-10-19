@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Lesson } from '../src/api/types';
-import { byWeek, monthDays, nextLesson, scheduleJson, shiftMonth, teacherClass, teacherList } from '../src/lib/lessons';
+import { byWeek, googleCalendarUrl, hourRange, monthDays, nextLesson, scheduleJson, shiftMonth, teacherClass, teacherList } from '../src/lib/lessons';
 import { instant } from '../src/lib/time';
 import { expectCode, makeDb, type TestDb } from './helpers';
 
@@ -36,6 +36,17 @@ describe('TD lesson helpers', () => {
     expect(nextLesson(list, instant('2026-10-26', '21:30', tz), tz)?.id).toBe(1);
     expect(nextLesson(list, instant('2026-10-26', '22:00', tz), tz)?.id).toBe(2);
     expect(nextLesson(list, instant('2026-12-01', '00:00', tz), tz)).toBeUndefined();
+  });
+
+  it('sizes the week grid and links one lesson to Google Calendar', () => {
+    expect(hourRange(list)).toEqual([10, 22]);
+    expect(hourRange([])).toEqual([9, 18]);
+    const u = new URL(googleCalendarUrl({ ...list[0], title: 'Houdini 入門' }, 'Asia/Taipei', 'https://meet.google.com/x'));
+    expect(u.origin + u.pathname).toBe('https://calendar.google.com/calendar/render');
+    expect(u.searchParams.get('action')).toBe('TEMPLATE');
+    expect(u.searchParams.get('dates')).toBe('20261026T130000Z/20261026T140000Z');
+    expect(u.searchParams.get('text')).toBe('TD 基礎教學 · 浡崴｜Houdini 入門');
+    expect(u.searchParams.get('location')).toBe('https://meet.google.com/x');
   });
 
   it('gives each teacher a stable colour and exports schedule.json', () => {
@@ -218,6 +229,17 @@ describe('TD lessons', () => {
     expect(unfolded.match(/BEGIN:VEVENT/g)).toHaveLength(2);
     expect(unfolded).toMatch(/UID:td-\d+@tnda-office-hour/);
     for (const line of text.split('\r\n')) expect(new TextEncoder().encode(line).length).toBeLessThanOrEqual(75);
+  });
+
+  it('narrows the feed to one teacher', async () => {
+    const feed = async (who: string | null) =>
+      ((await db.one(`select convert_from(public.oh_lessons_calendar(p_teacher => $1), 'UTF8') as v`, [who])).v as string).replace(/\r\n /g, '');
+    const one = await feed(' 哲瑜 ');
+    expect(one).toContain('X-WR-CALNAME:TD 專班課表 115-2 · 哲瑜');
+    expect(one.match(/BEGIN:VEVENT/g)).toHaveLength(1);
+    expect(one).toContain('SUMMARY:TD 解惑時間 · 哲瑜');
+    expect((await feed('沒有這個人')).match(/BEGIN:VEVENT/g)).toBeNull();
+    expect((await feed(null)).match(/BEGIN:VEVENT/g)).toHaveLength(2);
   });
 
   it('keeps the tables private', async () => {

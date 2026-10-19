@@ -1,6 +1,6 @@
 // The TD 專班 timetable: grouping, colours and the schedule.json format.
 import type { Lesson, LessonInfo } from '../api/types';
-import { addDays, instant, isoDow, toUTC } from './time';
+import { addDays, instant, isoDow, minutes, toUTC } from './time';
 
 /** Teachers in order of their first lesson; the index picks a colour. */
 export function teacherList(lessons: Lesson[]): string[] {
@@ -81,4 +81,27 @@ export function scheduleJson(info: LessonInfo, types: string[], lessons: Lesson[
     types,
     sessions: lessons.map(({ date, start, end, teacher, type, title, topic }) => ({ date, start, end, teacher, type, title, topic })),
   };
+}
+
+/** Whole hours that cover every lesson, for the week grid: [first, last). */
+export function hourRange(lessons: Lesson[]): [number, number] {
+  if (!lessons.length) return [9, 18];
+  const from = Math.min(...lessons.map((l) => minutes(l.start)));
+  const to = Math.max(...lessons.map((l) => minutes(l.end)));
+  return [Math.floor(from / 60), Math.ceil(to / 60)];
+}
+
+function utcStamp(ms: number): string {
+  return new Date(ms).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+}
+
+/** A link that opens Google Calendar with this one lesson filled in. */
+export function googleCalendarUrl(l: Lesson, tz: string, place: string): string {
+  const u = new URL('https://calendar.google.com/calendar/render');
+  u.searchParams.set('action', 'TEMPLATE');
+  u.searchParams.set('text', `TD ${l.type} · ${l.teacher}${l.title ? `｜${l.title}` : ''}`);
+  u.searchParams.set('dates', `${utcStamp(lessonStart(l, tz))}/${utcStamp(lessonEnd(l, tz))}`);
+  u.searchParams.set('details', [l.title, l.topic, `講師：${l.teacher}　類型：${l.type}`].filter(Boolean).join('\n\n'));
+  if (place) u.searchParams.set('location', place);
+  return u.toString();
 }

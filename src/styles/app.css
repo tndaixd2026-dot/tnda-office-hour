@@ -2439,9 +2439,6 @@ table.t tr.mine td {
   font-size: 13px;
   font-weight: 600;
 }
-.ls-tg.plain {
-  --tc: var(--ink-2);
-}
 .ls-tg::before {
   content: '';
   width: 10px;
@@ -2449,17 +2446,20 @@ table.t tr.mine td {
   border-radius: 3px;
   background: var(--tc);
 }
+.ls-tg.plain {
+  padding: 0 14px;
+}
+.ls-tg.plain::before {
+  display: none;
+}
 .ls-tg:hover {
   border-color: var(--ink);
 }
-.ls-tg[aria-pressed='false'] {
-  background: transparent;
-  color: var(--muted);
-  border-style: dashed;
-}
-.ls-tg[aria-pressed='false']::before {
-  background: transparent;
-  box-shadow: inset 0 0 0 1.5px var(--muted);
+/* one choice per group, like a segmented control */
+.ls-tg[aria-pressed='true'] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
 }
 /* admin: the whole row opens the editor */
 .ls-edit {
@@ -2483,6 +2483,116 @@ table.t tr.mine td {
   flex: 0 0 auto;
   color: var(--muted);
   margin-top: 2px;
+}
+
+/* week: a time grid on wider screens (phones get a list per day) */
+.ls-wk-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+.ls-wk {
+  --hh: 52px;
+  display: grid;
+  grid-template-columns: 56px repeat(7, minmax(92px, 1fr));
+  grid-template-rows: auto calc(var(--rows) * var(--hh));
+  min-width: 720px;
+}
+.ls-wk-corner {
+  border-bottom: 1px solid var(--line);
+}
+.ls-wk-dh {
+  display: grid;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+.ls-wk-dh b {
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.ls-wk-dh.today {
+  box-shadow: inset 0 -3px 0 var(--ink);
+}
+.ls-wk-hours {
+  display: grid;
+  grid-template-rows: repeat(var(--rows), var(--hh));
+}
+.ls-wk-hours span {
+  padding: 3px 8px 0 0;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+.ls-wk-col {
+  position: relative;
+  border-left: 1px solid var(--line);
+  background-image: linear-gradient(var(--line) 1px, transparent 1px);
+  background-size: 100% var(--hh);
+}
+.ls-ev {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
+  padding: 3px 6px;
+  border: 0;
+  border-left: 3px solid var(--tc);
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--ink);
+  text-align: left;
+  font-size: 12px;
+  line-height: 1.3;
+}
+.ls-ev:hover {
+  background: var(--surface-3);
+}
+.ls-ev:focus-visible {
+  outline-offset: -2px;
+}
+.ls-ev .t {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-2);
+}
+.ls-ev .n,
+.ls-ev .ttl {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ls-ev .n {
+  font-weight: 700;
+}
+.ls-ev.past {
+  background: var(--surface);
+  color: var(--muted);
+  border-left-color: var(--line-2);
+}
+.ls-ev.past .t {
+  color: var(--muted);
+}
+.ls-ev.live {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+/* by teacher: one column each */
+.ls-teachers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  gap: 28px;
+  align-items: start;
 }
 
 /* month */
