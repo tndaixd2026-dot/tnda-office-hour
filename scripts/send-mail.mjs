@@ -13,7 +13,7 @@
 //   ONLY=叁式公司  with sample_all: just the recipients with this 稱呼
 //   SUPABASE_DB_PASSWORD, POOLER_HOST   or DATABASE_URL directly
 //   GMAIL_USER, GMAIL_APP_PASSWORD      the account that sends
-//   SEND_AT=09:00  wait for this time in Taipei first (at most an hour)
+//   SEND_AT=08:00  wait for this time in Taipei first (at most an hour)
 //   FORCE=1        send again even if this week's email already went out
 //   DRY_RUN=1      write the messages, send nothing
 //   MAIL_TEST=1    "send" to nowhere (for trying the script locally)
@@ -62,7 +62,7 @@ function untilTaipei(hhmm) {
 const SAMPLE_NOTE =
   '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 0 12px;">' +
   '<tr><td bgcolor="#fbf0dc" style="padding:14px 16px;border:1px solid #e9d3ad;border-radius:12px;background-color:#fbf0dc;font-size:14px;text-align:left;">' +
-  '<b>這是範例信。</b>場次、組別和題目都是示範資料，實際的信會在每週一 09:00 依當週發布的場次寄出。' +
+  '<b>這是範例信。</b>場次、組別和題目都是示範資料，實際的信會在每週一 08:00 依當週發布的場次寄出。' +
   '<div style="margin-top:6px;">最上方的「一鍵把全部場次加到 Google 日曆」訂閱的是正式的行事曆（三位老師的全部場次），助教發布場次後就會自動出現；' +
   '每一場的「加入會議」和「加到 Google 日曆」可以直接試按，後者會打開 Google 日曆，按「儲存」才會加進去</div>' +
   '</td></tr></table>';
@@ -71,10 +71,10 @@ const TEST_NOTE =
   '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 0 12px;">' +
   '<tr><td bgcolor="#fbf0dc" style="padding:14px 16px;border:1px solid #e9d3ad;border-radius:12px;background-color:#fbf0dc;font-size:14px;text-align:left;">' +
   '<b>這是測試信，不用回覆。</b>用來確認您收得到 Office Hour 的通知、版面也正常。下面的場次、組別和題目都是示範資料，請不要加到日曆。' +
-  '<div style="margin-top:6px;">正式的信會在每週一 09:00 寄出，內容是當週實際排定的場次。最上方的「一鍵把全部場次加到 Google 日曆」是正式的訂閱連結，現在訂閱之後，場次排定時就會自動出現</div>' +
+  '<div style="margin-top:6px;">正式的信會在每週一 08:00 寄出，內容是當週實際排定的場次。最上方的「一鍵把全部場次加到 Google 日曆」是正式的訂閱連結，現在訂閱之後，場次排定時就會自動出現</div>' +
   '</td></tr></table>';
 const TEST_TEXT =
-  '這是測試信，不用回覆。下面的場次、組別和題目都是示範資料，請不要加到日曆。正式的信會在每週一 09:00 寄出，內容是當週實際排定的場次。\n\n';
+  '這是測試信，不用回覆。下面的場次、組別和題目都是示範資料，請不要加到日曆。正式的信會在每週一 08:00 寄出，內容是當週實際排定的場次。\n\n';
 
 /** The site's demo database: the same migrations, seed and demo data as
  *  demo mode (read from src/db/sql.ts, so the list is never copied). */

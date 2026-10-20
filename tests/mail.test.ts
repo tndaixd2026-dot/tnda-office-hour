@@ -148,7 +148,7 @@ describe('weekly email', () => {
   it('previews everything for the admins first', async () => {
     const [p] = await outbox('preview');
     expect(p.to).toBe('ta@example.com');
-    expect(p.subject).toBe('【預覽】週一 09:00 要寄出的 Office Hour 通知（10/19–10/25）');
+    expect(p.subject).toBe('【預覽】週一 08:00 要寄出的 Office Hour 通知（10/19–10/25）');
     expect(p.html).toContain('這是預覽');
     expect(p.html).toContain('prolong@example.com（Prolong）：【Office Hour】Prolong 本週 1 場（10/19–10/25）');
     expect(p.html).toContain('第 1 組「南宜到達的斜上方」');
