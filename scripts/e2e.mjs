@@ -108,6 +108,7 @@ try {
     await page.getByRole('button', { name: '送出預約需求' }).click();
     await page.getByText('請寫下想討論的題目').waitFor();
     await page.getByLabel('想討論的題目').fill('E2E：互動裝置的動線');
+    await page.getByLabel('想問 PM 的問題').fill('E2E：動線要單向嗎');
     await page.getByLabel('目前進度').fill('E2E 測試進度');
     await page.getByLabel('雲端資料夾連結').fill('not a url');
     await page.getByRole('button', { name: '送出預約需求' }).click();

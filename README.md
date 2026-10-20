@@ -99,7 +99,7 @@ flowchart LR
 ```bash
 npm install
 npm run dev          # http://localhost:5173（沒有 .env.local 時只能用示範模式）
-npm test             # 資料庫 API、排程演算法、Discord 通知、行事曆、TD 課表、寄信：105 項
+npm test             # 資料庫 API、排程演算法、Discord 通知、行事曆、TD 課表、寄信：106 項
 npm run build && npx vite preview --port 4173
 npm run e2e -- http://localhost:4173/   # 真實瀏覽器跑三種角色（示範模式）
 ```

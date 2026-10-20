@@ -368,6 +368,12 @@ function BoardView({ st, reload }: { st: AdminState; reload: () => void }) {
           <dl class="kv">
             <dt>題目</dt>
             <dd>{r.topic}</dd>
+            {r.questions && (
+              <>
+                <dt>想問的問題</dt>
+                <dd class="pre">{r.questions}</dd>
+              </>
+            )}
             <dt>進度</dt>
             <dd class="pre">{r.progress}</dd>
             {safeHref(r.link) && (

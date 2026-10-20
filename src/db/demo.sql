@@ -124,5 +124,22 @@ begin
   perform app._demo_appt(w_next, 2, 'Joseph', 1, '17:00');
 end $$;
 
+-- what each group wants to ask the PM
+update app.requests r set questions = v.q
+  from (values
+    ('投影融合的測試方法', E'兩台投影機重疊的地方亮度不均，要怎麼調\n融合用 Resolume 就夠嗎'),
+    ('展場平面圖回饋', E'入口到主裝置的動線會不會太長\n排隊區放在哪裡比較不擋路'),
+    ('使用者測試要問什麼', E'要找幾個人測才夠\n要錄影，還是做筆記就好'),
+    ('預算超支怎麼辦', E'哪些項目可以先砍\n租和買要怎麼取捨'),
+    ('風格定案前的最後確認', '兩版 moodboard 哪一版比較適合展場燈光'),
+    ('投影融合的接縫怎麼處理', E'接縫要用軟邊還是硬切\n需要另外買融合器嗎'),
+    ('展場動線要怎麼配合互動裝置', E'每個人體驗多久比較好\n動線要單向，還是可以回頭'),
+    ('互動流程測試要找誰來試', E'找同學測會不會太有偏見\n測之前要先說明玩法嗎'),
+    ('感測器延遲太大，要換方案嗎', E'0.3 秒的延遲觀眾感覺得到嗎\n換成 ToF 值得多花預算嗎'),
+    ('估價單的人力怎麼抓', '工時要用小時還是天來估'),
+    ('影像內容的風格方向', '寫實和插畫哪一種比較好做互動')
+  ) as v (t, q)
+ where r.topic = v.t;
+
 drop function app._demo_request(int, int, text, text, text, text, int, text[], interval);
 drop function app._demo_appt(int, int, text, int, text, text);

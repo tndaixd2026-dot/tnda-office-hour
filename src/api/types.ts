@@ -60,6 +60,8 @@ export interface Request {
   group_id: number;
   topic: string;
   progress: string;
+  /** what the group wants to ask the PM; '' when not given */
+  questions: string;
   link: string | null;
   want: number;
   author: string;
@@ -132,6 +134,7 @@ export interface TeacherSession {
   request: {
     topic: string;
     progress: string;
+    questions: string;
     link: string | null;
     want: number;
     author: string;

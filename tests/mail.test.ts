@@ -10,6 +10,7 @@ describe('weekly email', () => {
   let admin: string;
   let student: string;
   let ids: Record<string, number>;
+  let codes: any;
   const outbox = async (kind: string, extra: Record<string, unknown> = {}) =>
     (await db.one(`select app.mail_outbox($1, null, $2, $3, $4, $5, $6) as v`, [kind, SITE, API, KEY, extra.fallback ?? 'sender@example.com', extra.force ?? false])).v;
 
@@ -17,6 +18,7 @@ describe('weekly email', () => {
     db = await makeDb();
     await db.setNow('2026-10-14T09:00:00+08:00');
     const c = await db.codes();
+    codes = c;
     admin = (await db.call('oh_join', { p_code: c.admin })).token;
     student = (await db.call('oh_join', { p_code: c.groups[2], p_name: '小晴' })).token;
     ids = {};
@@ -25,11 +27,33 @@ describe('weekly email', () => {
     const w7 = (await db.one("select id from app.weeks where label = 'W7'")).id;
     await db.call('oh_request_save', {
       p_token: student, p_week: w7, p_topic: '展場動線 & <排隊>', p_progress: '平面圖完成\n下一步：測試', p_link: 'https://drive.google.com/x',
-      p_want: 1, p_slots: [{ d: '2026-10-21', t: '10:00' }], p_version: null,
+      p_want: 1, p_slots: [{ d: '2026-10-21', t: '10:00' }], p_version: null, p_questions: '動線要單向嗎？\n排隊區放哪裡',
     });
     await db.call('oh_admin_assign', { p_token: admin, p_week: w7, p_group: ids.g2, p_teacher: ids.Prolong, p_d: '2026-10-21', p_t: '10:00' });
     await db.call('oh_admin_assign', { p_token: admin, p_week: w7, p_group: ids.g1, p_teacher: ids.Joseph, p_d: '2026-10-19', p_t: '17:00', p_force: true });
     await db.call('oh_admin_publish', { p_token: admin, p_week: w7 });
+  });
+
+  it('keeps the questions a group asks for the PM', async () => {
+    const req = async () => db.one(`select id, version, questions from app.requests where group_id = $1`, [ids.g2]);
+    expect((await req()).questions).toBe('動線要單向嗎？\n排隊區放哪裡');
+    const w7 = (await db.one("select id from app.weeks where label = 'W7'")).id;
+    const again = (extra: Record<string, unknown>) =>
+      db.call('oh_request_save', {
+        p_token: student, p_week: w7, p_topic: '展場動線 & <排隊>', p_progress: '平面圖完成\n下一步：測試', p_link: 'https://drive.google.com/x',
+        p_want: 1, p_slots: [{ d: '2026-10-21', t: '10:00' }], ...extra,
+      });
+    // a page loaded before the field existed sends none: the questions stay
+    const saved = await again({ p_version: (await req()).version });
+    expect(saved.questions).toBe('動線要單向嗎？\n排隊區放哪裡');
+    await expectCode(again({ p_version: saved.version, p_questions: 'x'.repeat(1001) }), 'VALIDATION', 'questions');
+    // the PMs see them, and so does their calendar
+    const pm = (await db.call('oh_join', { p_code: codes.teachers.Prolong })).token;
+    const st = await db.call('oh_teacher_state', { p_token: pm });
+    expect(st.sessions.find((x: any) => x.group.no === 2).request.questions).toBe('動線要單向嗎？\n排隊區放哪裡');
+    const feed = (await db.one(`select feed from app.teachers where name = 'Prolong'`)).feed;
+    const ics = await db.one(`select convert_from(public.oh_calendar(p_feed => $1), 'UTF8') as v`, [feed]);
+    expect(String(ics.v).replace(/\r\n /g, '')).toContain('想問的問題：\\n動線要單向嗎？\\n排隊區放哪裡');
   });
 
   it('works out which Monday the email is about', async () => {
@@ -89,6 +113,10 @@ describe('weekly email', () => {
     // student text is escaped
     expect(prolong.html).toContain('<b>展場動線 &amp; &lt;排隊&gt;</b>');
     expect(prolong.html).not.toContain('<排隊>');
+    // what they want to ask, and the folder written out
+    expect(prolong.html).toContain('想問的問題</p><p style="margin:2px 0 0;font-size:14px;line-height:1.6;color:#161514;white-space:pre-line;">動線要單向嗎？\n排隊區放哪裡</p>');
+    expect(prolong.html).toContain('>drive.google.com/x</a>');
+    expect(prolong.text).toContain('  想問的問題：動線要單向嗎？\n    排隊區放哪裡\n  檔案：https://drive.google.com/x\n');
     // one Google Calendar button per session, with the right UTC times
     expect(prolong.html.match(/action=TEMPLATE/g)).toHaveLength(1);
     expect(prolong.html).toContain('dates=20261021T020000Z/20261021T023000Z');

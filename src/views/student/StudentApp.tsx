@@ -381,6 +381,12 @@ function Home({ st, setWeek, reload }: { st: StudentState; setWeek: (id: number)
                   </div>
                   <span class="chip">想約 {minutesText(req.want * mins)}</span>
                 </div>
+                {req.questions && (
+                  <div class="qbox">
+                    <span class="eyebrow">想問 PM 的問題</span>
+                    <p class="pre">{req.questions}</p>
+                  </div>
+                )}
                 <p class="pre muted clamp-3">{req.progress}</p>
                 {safeHref(req.link) && (
                   <a class="small row" style={{ gap: '6px', width: 'fit-content' }} href={safeHref(req.link)} target="_blank" rel="noopener noreferrer">

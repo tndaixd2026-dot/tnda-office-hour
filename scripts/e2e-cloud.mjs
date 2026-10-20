@@ -68,6 +68,7 @@ try {
     await cells.nth(0).click();
     await cells.nth(2).click();
     await a.getByLabel('想討論的題目').fill(`甲的題目-${RUN}`);
+    await a.getByLabel('想問 PM 的問題').fill('甲想問的問題');
     await a.getByLabel('目前進度').fill('甲寫的進度');
     await a.getByRole('button', { name: '送出預約需求' }).click();
     await a.getByText(`甲的題目-${RUN}`).waitFor();

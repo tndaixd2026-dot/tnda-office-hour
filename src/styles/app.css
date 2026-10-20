@@ -889,6 +889,15 @@ a.place {
   border-radius: 10px;
 }
 
+/* what a group wants to ask the PM */
+.qbox {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: var(--r);
+  background: var(--bg);
+}
+
 /* ---------- notices ---------- */
 .notice {
   display: flex;

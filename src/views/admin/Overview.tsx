@@ -55,6 +55,7 @@ export function Overview() {
         ['status', '狀態'],
         ['want', '想約格數'],
         ['topic', '題目'],
+        ['questions', '想問的問題'],
         ['progress', '進度'],
         ['link', '連結'],
         ['slots', '可以的時段'],

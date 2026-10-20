@@ -17,6 +17,7 @@ interface Draft {
   picks: string[];
   want: number;
   topic: string;
+  questions: string;
   progress: string;
   link: string;
   base: number | null;
@@ -29,6 +30,7 @@ function fromRequest(r: Request | null): Draft {
     picks: r ? r.slots.map((s) => slotKey(s.d, s.t)) : [],
     want: r?.want ?? 1,
     topic: r?.topic ?? '',
+    questions: r?.questions ?? '',
     progress: r?.progress ?? '',
     link: r?.link ?? '',
     base: r?.version ?? null,
@@ -81,10 +83,11 @@ export function Book({ st, weekId, reload }: { st: StudentState; weekId: number;
   const errors = {
     picks: effective.length === 0 ? '請在時段表至少勾選一格' : null,
     topic: !d.topic.trim() ? '請寫下想討論的題目，PM 可以先準備' : d.topic.trim().length > 80 ? '題目最多 80 字' : null,
+    questions: !d.questions.trim() ? '請寫下想問 PM 的問題，PM 會在通知信裡先看到' : d.questions.length > 1000 ? '最多 1000 字' : null,
     progress: !d.progress.trim() ? '請簡單說明目前做到哪裡' : d.progress.length > 1000 ? '最多 1000 字' : null,
     link: d.link.trim() && !LINK_RE.test(d.link.trim()) ? '請貼完整網址（https:// 開頭）' : null,
   };
-  const valid = !errors.picks && !errors.topic && !errors.progress && !errors.link;
+  const valid = !errors.picks && !errors.topic && !errors.questions && !errors.progress && !errors.link;
 
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((x) => ({ ...x, [k]: v }));
   const toggle = (k: string, on: boolean) =>
@@ -105,6 +108,7 @@ export function Book({ st, weekId, reload }: { st: StudentState; weekId: number;
         call<Request>('oh_request_save', {
           p_week: weekId,
           p_topic: d.topic,
+          p_questions: d.questions,
           p_progress: d.progress,
           p_link: d.link.trim() || null,
           p_want: d.want,
@@ -292,6 +296,22 @@ export function Book({ st, weekId, reload }: { st: StudentState; weekId: number;
                 maxLength={80}
                 placeholder="例：互動裝置的感測器要選哪一種"
                 onInput={(e) => set('topic', (e.target as HTMLInputElement).value)}
+              />
+            </Field>
+            <Field
+              label="想問 PM 的問題"
+              error={tried ? errors.questions : null}
+              count={d.questions.length}
+              max={1000}
+              help="一行一個問題。PM 會在週一的通知信裡先看到，可以事先準備"
+            >
+              <textarea
+                class="textarea"
+                value={d.questions}
+                maxLength={1000}
+                rows={4}
+                placeholder={'例：\n感測延遲 0.3 秒，觀眾感覺得到嗎\n換成 ToF 感測器值得多花預算嗎'}
+                onInput={(e) => set('questions', (e.target as HTMLTextAreaElement).value)}
               />
             </Field>
             <Field label="目前進度" error={tried ? errors.progress : null} count={d.progress.length} max={1000}>

@@ -108,7 +108,9 @@ function TeacherHome({ st }: { st: TeacherState }) {
               tz,
               title: `Office Hour · ${team ? `${s.teacher} · ` : ''}第 ${s.group.no} 組${s.request?.topic ? `｜${s.request.topic}` : ''}`,
               location: st.settings.location,
-              description: [s.request?.progress, s.request?.link].filter(Boolean).join('\n\n'),
+              description: [s.request?.questions && `想問的問題：\n${s.request.questions}`, s.request?.progress, s.request?.link]
+                .filter(Boolean)
+                .join('\n\n'),
             })),
           `Office Hour · ${st.me.name}`,
         ),
@@ -357,6 +359,14 @@ function SessionCard({ s, st, mins, now }: { s: TeacherSession; st: TeacherState
         {r ? (
           <>
             <p style={{ fontWeight: 600 }}>{r.topic}</p>
+            {r.questions && (
+              <div class="qbox">
+                <span class="tiny muted" style={{ fontWeight: 700 }}>
+                  想問的問題
+                </span>
+                <p class="small pre">{r.questions}</p>
+              </div>
+            )}
             <p class={`small muted pre ${open ? '' : 'clamp-2'}`}>{r.progress}</p>
             <div class="row wrap small">
               {r.progress.length > 60 && (
