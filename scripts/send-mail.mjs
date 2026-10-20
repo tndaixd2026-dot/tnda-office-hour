@@ -58,7 +58,8 @@ const SAMPLE_NOTE =
   '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 0 12px;">' +
   '<tr><td bgcolor="#fbf0dc" style="padding:14px 16px;border:1px solid #e9d3ad;border-radius:12px;background-color:#fbf0dc;font-size:14px;text-align:left;">' +
   '<b>這是範例信。</b>場次、組別和題目都是示範資料，實際的信會在每週一 09:00 依當週發布的場次寄出。' +
-  '<div style="margin-top:6px;">最上方的「一鍵把全部場次加到 Google 日曆」在範例裡訂閱不到內容；每一場的「加入會議」和「加到 Google 日曆」可以直接試按</div>' +
+  '<div style="margin-top:6px;">最上方的「一鍵把全部場次加到 Google 日曆」訂閱的是正式的行事曆（三位老師的全部場次），助教發布場次後就會自動出現；' +
+  '每一場的「加入會議」和「加到 Google 日曆」可以直接試按，後者會打開 Google 日曆，按「儲存」才會加進去</div>' +
   '</td></tr></table>';
 
 /** The site's demo database: the same migrations, seed and demo data as
@@ -118,6 +119,12 @@ if (kind === 'test' || kind === 'sample') {
   const q = kind === 'sample' ? await demoDb(room) : db;
   week = await weekOf(q, 'test');
   const m = (await q.query(`select app.mail_message($1::date, '{}', $2, $3, $4, $5) as v`, [week, kind === 'sample' ? '叁式' : null, ...urls])).rows[0].v;
+  if (kind === 'sample') {
+    // subscribe to the real shared calendar, not the demo's (which the site does not know)
+    const feed = async (c) => (await c.query('select feed from app.teachers where team order by id limit 1')).rows[0]?.feed;
+    const [demo, real] = [await feed(q), await feed(db)];
+    if (demo && real) for (const k of ['html', 'text']) m[k] = m[k].split(demo).join(real);
+  }
   list = [
     kind === 'sample'
       ? { ...m, to: user, subject: `【範例】${m.subject}`, html: m.html.replace('<!--banner-->', SAMPLE_NOTE) }
