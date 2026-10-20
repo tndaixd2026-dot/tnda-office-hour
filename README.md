@@ -53,7 +53,7 @@ TN0006「一場體驗如何發生：跨域數位製作實務」的 Office Hour �
 
 ## 設計
 
-- **Caldera 設計系統。** 暖灰畫布（pumice）、石灰白卡片（limestone）、一個熔岩橘（ember），不用陰影，層次只靠底色區分。大標題用 Anton（中文用 Noto Sans TC Black），內文用 DM Sans Medium；按鈕、輸入框、標籤都是膠囊形。每頁最多一個紫色半色調區塊（下一次 Office Hour）。橘色上的小字一律用黑色，不用白色。
+- **紙、墨、一個訊號色。** 版面只靠字級與留白建立層次；橘色只出現在「你選的」和「正在發生的」東西上。
 - **一個畫面一件事。** 學生首頁先回答「下一次是什麼時候」，再談預約；老師首頁只有行程；助教的排程板把需求、空檔、草稿放在同一張表上。
 - **即時、而且說得出發生了什麼。** 組員改了需求、助教排好時間、有人取消，畫面會更新並跳出一行說明，不需要重新整理。
 - **手機優先。** 學生大多用手機：格子 44px 以上、可點可拖曳、無水平捲動；助教在手機上一次看一天。
@@ -161,7 +161,7 @@ psql "<資料庫連線字串>" -f scripts/fresh-start.sql
 | GitHub Actions | 自動測試、資料庫 migration、部署、每日喚醒 | 公開 repo 不限分鐘數 |
 | Supabase | 資料庫、API、即時同步、Discord 通知 | Free 方案（組織沒有綁定任何付款方式，不可能產生費用） |
 | jsDelivr | 示範模式的資料庫引擎 | 免費 |
-| Google Fonts | Anton、DM Sans、Noto Sans TC、IBM Plex Mono | 免費 |
+| Google Fonts | Noto Sans TC、IBM Plex Mono | 免費 |
 | Discord Webhook | 自動通知 | 免費 |
 | Gmail | 每週一寄給老師的信 | 免費（每天上限 500 封） |
 
