@@ -23,6 +23,7 @@ import mailDesign from '../../supabase/migrations/20261020000020_mail_design.sql
 import requestQuestions from '../../supabase/migrations/20261020000021_request_questions.sql?raw';
 import mailRobust from '../../supabase/migrations/20261020000022_mail_robust.sql?raw';
 import monday8am from '../../supabase/migrations/20261020000023_monday_8am.sql?raw';
+import tdUnits from '../../supabase/migrations/20261020000024_td_units.sql?raw';
 import seed from '../../supabase/seed.sql?raw';
 
 // Supabase provides these roles and the realtime schema; a bare Postgres
@@ -36,5 +37,5 @@ create function realtime.send(payload jsonb, event text, topic text, private boo
 returns void language sql as $$ select pg_notify('oh_sync', payload::text) $$;
 `;
 
-export const MIGRATIONS = [schema, api, discord, expiry, privateRealtime, calendarFeeds, nameLogin, adminNameLogin, oneGroupPerSlot, tdLessons, tdCalendarByTeacher, teamView, weekDeadline, weeklyMail, mailPreviewNote, taReminder, tdResidency, pmMeetRoom, tdMeetRoom, mailDesign, requestQuestions, mailRobust, monday8am];
+export const MIGRATIONS = [schema, api, discord, expiry, privateRealtime, calendarFeeds, nameLogin, adminNameLogin, oneGroupPerSlot, tdLessons, tdCalendarByTeacher, teamView, weekDeadline, weeklyMail, mailPreviewNote, taReminder, tdResidency, pmMeetRoom, tdMeetRoom, mailDesign, requestQuestions, mailRobust, monday8am, tdUnits];
 export const SEED = seed;

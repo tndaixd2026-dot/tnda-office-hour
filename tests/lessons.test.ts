@@ -1,12 +1,28 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Lesson } from '../src/api/types';
-import { byWeek, googleCalendarUrl, hourRange, monthDays, nextLesson, scheduleJson, shiftMonth, teacherClass, teacherList } from '../src/lib/lessons';
+import {
+  byWeek,
+  cnNum,
+  googleCalendarUrl,
+  hourRange,
+  lessonDetails,
+  lessonSummary,
+  lessonTitle,
+  monthDays,
+  nextLesson,
+  scheduleJson,
+  shiftMonth,
+  teacherClass,
+  teacherList,
+  unitLabel,
+  unitOf,
+} from '../src/lib/lessons';
 import { instant } from '../src/lib/time';
 import { expectCode, makeDb, type TestDb } from './helpers';
 
 describe('TD lesson helpers', () => {
   const L = (id: number, date: string, start: string, teacher: string): Lesson => ({
-    id, date, start, end: `${String(Number(start.slice(0, 2)) + 1).padStart(2, '0')}:00`, teacher, type: '基礎教學', title: '', topic: '',
+    id, date, start, end: `${String(Number(start.slice(0, 2)) + 1).padStart(2, '0')}:00`, teacher, type: '基礎教學', unit: null, title: '', topic: '',
   });
   const list = [L(1, '2026-10-26', '21:00', '浡崴'), L(2, '2026-10-27', '21:00', '哲瑜'), L(3, '2026-11-08', '10:00', '哲瑜'), L(4, '2026-11-09', '21:00', '浡崴')];
 
@@ -54,8 +70,27 @@ describe('TD lesson helpers', () => {
     expect(t).toEqual(['浡崴', '哲瑜']);
     expect([teacherClass(t, '浡崴'), teacherClass(t, '哲瑜')]).toEqual(['tc0', 'tc1']);
     const doc = scheduleJson({ title: 'T', subtitle: 'S', place: '', note: '' }, ['基礎教學'], list);
-    expect(doc.sessions[0]).toEqual({ date: '2026-10-26', start: '21:00', end: '22:00', teacher: '浡崴', type: '基礎教學', title: '', topic: '' });
+    expect(doc.sessions[0]).toEqual({ date: '2026-10-26', start: '21:00', end: '22:00', teacher: '浡崴', type: '基礎教學', unit: null, title: '', topic: '' });
     expect(doc.sessions[0]).not.toHaveProperty('id');
+    expect(doc.units).toEqual([]);
+  });
+
+  it('numbers units in Chinese and names a lesson by its unit', () => {
+    expect([1, 9, 10, 11, 19, 20, 21, 35, 100].map(cnNum)).toEqual(['一', '九', '十', '十一', '十九', '二十', '二十一', '三十五', '100']);
+    const unit = { id: 7, type: '基礎教學', no: 2, title: '粒子', topic: '帶筆電' };
+    expect(unitLabel(unit)).toBe('基礎教學（二）');
+    const l = { ...list[0], unit: 7, title: '補課' };
+    expect(unitOf(l, [unit])).toBe(unit);
+    expect(unitOf(list[0], [unit])).toBeUndefined();
+    expect(lessonTitle(l, unit)).toBe('粒子｜補課');
+    expect(lessonTitle(list[0])).toBe('');
+    // the same words as the calendar feed
+    expect(lessonSummary(l, unit)).toBe('TD 基礎教學（二）粒子 · 浡崴｜補課');
+    expect(lessonSummary(list[0])).toBe('TD 基礎教學 · 浡崴');
+    expect(lessonDetails(l, unit)).toBe('基礎教學（二）粒子\n\n帶筆電\n\n補課\n\n講師：浡崴　類型：基礎教學');
+    const u = new URL(googleCalendarUrl(l, 'Asia/Taipei', '', unit));
+    expect(u.searchParams.get('text')).toBe('TD 基礎教學（二）粒子 · 浡崴｜補課');
+    expect(u.searchParams.has('location')).toBe(false);
   });
 });
 
@@ -95,7 +130,7 @@ describe('TD lessons', () => {
     expect(r.lessons.filter((l: any) => l.type === '駐村創作')).toHaveLength(24);
     expect(r.lessons).toHaveLength(84);
     expect(r.lessons[0]).toEqual({
-      id: r.lessons[0].id, date: '2026-10-26', start: '21:00', end: '22:00', teacher: '浡崴', type: '基礎教學', title: '', topic: '',
+      id: r.lessons[0].id, date: '2026-10-26', start: '21:00', end: '22:00', teacher: '浡崴', type: '基礎教學', unit: null, title: '', topic: '',
     });
     expect(r.lessons.at(-1).date).toBe('2027-01-02');
     expect(r.clock.today).toBe('2026-10-19');
@@ -251,5 +286,207 @@ describe('TD lessons', () => {
     await expect(db.sql('select * from app.lesson_info')).rejects.toThrow(/permission denied/);
     await expect(db.sql(`select app.lesson_kinds()`)).rejects.toThrow(/permission denied/);
     await db.sql('reset role');
+  });
+});
+
+describe('TD units', () => {
+  let db: TestDb;
+  let admin: string;
+  let student: string;
+  // the seeded 基礎教學 lessons, by date and start
+  const ids: Record<string, number> = {};
+  const units = async () => (await db.call('oh_lessons')).units;
+  const unitOf = async (id: number) => (await db.call('oh_lessons')).lessons.find((l: any) => l.id === id).unit;
+
+  beforeAll(async () => {
+    db = await makeDb();
+    await db.setNow('2026-10-19T09:00:00+08:00');
+    const c = await db.codes();
+    admin = (await db.call('oh_join', { p_code: c.admin })).token;
+    student = (await db.call('oh_join', { p_code: c.groups[2], p_name: '小晴' })).token;
+    for (const l of (await db.call('oh_lessons')).lessons) ids[`${l.date} ${l.start}`] = l.id;
+  });
+
+  it('starts with none, and only admins add them', async () => {
+    const r = await db.call('oh_lessons');
+    expect(r.units).toEqual([]);
+    expect(r.lessons[0].unit).toBeNull();
+    await expectCode(db.call('oh_admin_lesson_unit_save', { p_token: student, p: { type: '基礎教學', title: 'x' } }), 'FORBIDDEN');
+    await expectCode(db.call('oh_admin_lesson_unit_delete', { p_token: student, p_id: 1 }), 'FORBIDDEN');
+  });
+
+  it('numbers units within their type and ticks the lessons that teach them', async () => {
+    const one = await db.call('oh_admin_lesson_unit_save', {
+      p_token: admin,
+      p: { type: '基礎教學', title: ' 介面與\t節點 ', topic: '認識介面\r\n\n\n\n帶筆電', lessons: [ids['2026-10-26 21:00'], ids['2026-11-03 21:00']] },
+    });
+    expect(one).toEqual({ id: one.id, type: '基礎教學', no: 1, title: '介面與 節點', topic: '認識介面\n\n帶筆電' });
+    const two = await db.call('oh_admin_lesson_unit_save', { p_token: admin, p: { type: '基礎教學', title: 'SOP 與動態', lessons: [ids['2026-11-02 21:00']] } });
+    const share = await db.call('oh_admin_lesson_unit_save', { p_token: admin, p: { type: '案例分享', title: '作品集' } });
+    expect([two.no, share.no]).toEqual([2, 1]);
+    expect((await units()).map((u: any) => [u.type, u.no, u.title])).toEqual([
+      ['基礎教學', 1, '介面與 節點'],
+      ['基礎教學', 2, 'SOP 與動態'],
+      ['案例分享', 1, '作品集'],
+    ]);
+    expect(await unitOf(ids['2026-10-26 21:00'])).toBe(one.id);
+    expect(await unitOf(ids['2026-11-03 21:00'])).toBe(one.id);
+    expect(await unitOf(ids['2026-11-02 21:00'])).toBe(two.id);
+
+    // one unit per lesson: ticking it in another unit moves it there, and unticking leaves it without one
+    await db.call('oh_admin_lesson_unit_save', { p_token: admin, p: { id: two.id, title: 'SOP 與動態', lessons: [ids['2026-11-02 21:00'], ids['2026-11-03 21:00']] } });
+    expect(await unitOf(ids['2026-11-03 21:00'])).toBe(two.id);
+    await db.call('oh_admin_lesson_unit_save', { p_token: admin, p: { id: one.id, type: '基礎教學', title: '介面與節點', lessons: [] } });
+    expect(await unitOf(ids['2026-10-26 21:00'])).toBeNull();
+    expect(await unitOf(ids['2026-11-03 21:00'])).toBe(two.id);
+    // without `lessons` the ticks stay as they are
+    await db.call('oh_admin_lesson_unit_save', { p_token: admin, p: { id: two.id, title: 'SOP 與動態', topic: '補充' } });
+    expect(await unitOf(ids['2026-11-02 21:00'])).toBe(two.id);
+    const log = await db.sql("select data from app.events where kind = 'config.lesson_unit' order by id desc limit 1");
+    expect(log[0].data.label).toBe('基礎教學（二）');
+  });
+
+  it('moves a unit to another number', async () => {
+    const [one, two] = await units();
+    const three = await db.call('oh_admin_lesson_unit_save', { p_token: admin, p: { type: '基礎教學', title: '粒子', no: 1 } });
+    expect(three.no).toBe(1);
+    const order = async () => (await units()).filter((u: any) => u.type === '基礎教學').map((u: any) => `${u.no}${u.title}`);
+    expect(await order()).toEqual(['1粒子', '2介面與節點', '3SOP 與動態']);
+    await db.call('oh_admin_lesson_unit_save', { p_token: admin, p: { id: three.id, title: '粒子', no: 99 } });
+    expect(await order()).toEqual(['1介面與節點', '2SOP 與動態', '3粒子']);
+    await db.call('oh_admin_lesson_unit_save', { p_token: admin, p: { id: two.id, title: 'SOP 與動態', no: 1 } });
+    expect(await order()).toEqual(['1SOP 與動態', '2介面與節點', '3粒子']);
+    await db.call('oh_admin_lesson_unit_save', { p_token: admin, p: { id: one.id, title: '介面與節點', no: 1 } });
+    expect(await order()).toEqual(['1介面與節點', '2SOP 與動態', '3粒子']);
+    // deleting one closes the gap and keeps its lessons, without a unit
+    await db.call('oh_admin_lesson_unit_save', { p_token: admin, p: { id: three.id, title: '粒子', lessons: [ids['2026-11-07 17:00']] } });
+    expect(await db.call('oh_admin_lesson_unit_delete', { p_token: admin, p_id: one.id })).toEqual({ ok: true });
+    expect(await order()).toEqual(['1SOP 與動態', '2粒子']);
+    expect(await unitOf(ids['2026-11-07 17:00'])).toBe(three.id);
+    expect((await db.call('oh_lessons')).lessons).toHaveLength(84);
+    await expectCode(db.call('oh_admin_lesson_unit_delete', { p_token: admin, p_id: one.id }), 'NOT_FOUND', 'unit');
+    await expectCode(db.call('oh_admin_lesson_unit_save', { p_token: admin, p: { id: one.id, title: 'x' } }), 'NOT_FOUND', 'unit');
+  });
+
+  it('validates a unit and keeps its lessons of its own type', async () => {
+    const [two] = await units();
+    const share = ids['2026-11-06 21:00']; // 案例分享
+    const bad = [
+      { type: '基礎教學', title: '  ' },
+      { type: '基礎教學', title: 'x'.repeat(81) },
+      { type: '基礎教學', title: 'x', topic: 'x'.repeat(1001) },
+      { type: '進階課', title: 'x' },
+      { title: 'x' },
+      { type: '基礎教學', title: 'x', no: 'one' },
+      { type: '基礎教學', title: 'x', lessons: 'all' },
+      { type: '基礎教學', title: 'x', lessons: ['1'] },
+      { id: 'x', title: 'x' },
+      { id: two.id, type: '案例分享', title: 'x' }, // the type is fixed
+    ];
+    for (const p of bad) await expectCode(db.call('oh_admin_lesson_unit_save', { p_token: admin, p }), 'VALIDATION', 'unit');
+    await expectCode(db.call('oh_admin_lesson_unit_save', { p_token: admin, p: [] }), 'VALIDATION', 'unit');
+    await expectCode(db.call('oh_admin_lesson_unit_save', { p_token: admin, p: { id: two.id, title: 'x', lessons: [share] } }), 'VALIDATION', 'unit_lessons');
+    await expectCode(db.call('oh_admin_lesson_unit_save', { p_token: admin, p: { id: two.id, title: 'x', lessons: [999999] } }), 'VALIDATION', 'unit_lessons');
+    expect((await units())[0].title).toBe('SOP 與動態');
+    // the old name of 駐村創作 still works
+    const res = await db.call('oh_admin_lesson_unit_save', { p_token: admin, p: { type: '解惑時間', title: '期末作品' } });
+    expect(res.type).toBe('駐村創作');
+    await db.call('oh_admin_lesson_unit_delete', { p_token: admin, p_id: res.id });
+  });
+
+  it('sets a lesson unit when it is saved, and drops it when the type changes', async () => {
+    const [two] = await units();
+    const share = (await units()).find((u: any) => u.type === '案例分享');
+    const lesson26 = (await db.call('oh_lessons')).lessons.find((l: any) => l.id === ids['2026-10-26 21:00']);
+    const { id, unit, ...p } = lesson26;
+    expect(unit).toBeNull();
+    expect((await db.call('oh_admin_lesson_save', { p_token: admin, p: { ...p, id, unit: two.id } })).unit).toBe(two.id);
+    // left out, an edit keeps it
+    expect((await db.call('oh_admin_lesson_save', { p_token: admin, p: { ...p, id, title: '加開' } })).unit).toBe(two.id);
+    // a unit of another type is refused
+    await expectCode(db.call('oh_admin_lesson_save', { p_token: admin, p: { ...p, id, unit: share.id } }), 'VALIDATION', 'unit');
+    await expectCode(db.call('oh_admin_lesson_save', { p_token: admin, p: { ...p, id, unit: 'x' } }), 'VALIDATION', 'lesson');
+    // a new type drops the old unit
+    expect((await db.call('oh_admin_lesson_save', { p_token: admin, p: { ...p, id, type: '案例分享' } })).unit).toBeNull();
+    expect((await db.call('oh_admin_lesson_save', { p_token: admin, p: { ...p, id, type: '案例分享', unit: share.id } })).unit).toBe(share.id);
+    expect((await db.call('oh_admin_lesson_save', { p_token: admin, p: { ...p, id, type: '案例分享', unit: null } })).unit).toBeNull();
+    await db.call('oh_admin_lesson_save', { p_token: admin, p: { ...p, id, title: '加開', unit: two.id } });
+    const added = await db.call('oh_admin_lesson_save', { p_token: admin, p: lesson({ unit: two.id }) });
+    expect(added.unit).toBe(two.id);
+    await db.call('oh_admin_lesson_delete', { p_token: admin, p_id: added.id });
+  });
+
+  it('names the unit in the calendar feed', async () => {
+    const [two] = await units();
+    await db.call('oh_admin_lesson_unit_save', { p_token: admin, p: { id: two.id, title: two.title, topic: '補充' } });
+    const text = ((await db.one(`select convert_from(public.oh_lessons_calendar(), 'UTF8') as v`)).v as string).replace(/\r\n /g, '');
+    expect(text).toContain('SUMMARY:TD 基礎教學（一）SOP 與動態 · 浡崴｜加開\r\n');
+    expect(text).toContain(String.raw`DESCRIPTION:基礎教學（一）SOP 與動態\n\n補充\n\n加開\n\n講師：浡崴　類型：基礎教學`);
+    expect(text).toContain('SUMMARY:TD 基礎教學 · 哲瑜\r\n'); // 10/27 has no unit
+  });
+
+  it('exports and imports units with the timetable', async () => {
+    const st = await db.call('oh_lessons');
+    const doc = scheduleJson(st.info, st.types, st.lessons.slice(0, 6), st.units);
+    expect(doc.units).toEqual([
+      { type: '基礎教學', no: 1, title: 'SOP 與動態', topic: '補充' },
+      { type: '基礎教學', no: 2, title: '粒子', topic: '' },
+      { type: '案例分享', no: 1, title: '作品集', topic: '' },
+    ]);
+    expect(doc.sessions.map((s) => s.unit)).toEqual([1, null, 1, 1, null, 2]);
+
+    // a file with units replaces them; a session's unit is the unit's number within its type
+    const r = await db.call('oh_admin_lessons_import', {
+      p_token: admin,
+      p: {
+        units: [
+          { type: '基礎教學', no: 2, title: '節點' },
+          { type: '基礎教學', no: 1, title: '介面', topic: '先裝好軟體' },
+          { type: '案例分享', title: '業界案例' },
+        ],
+        sessions: [lesson({ unit: 1 }), lesson({ date: '2027-01-07', unit: 2 }), lesson({ date: '2027-01-08', type: '案例分享', unit: 1 }), lesson({ date: '2027-01-09' })],
+      },
+    });
+    expect(r).toEqual({ count: 4, units: 3 });
+    const after = await db.call('oh_lessons');
+    expect(after.units.map((u: any) => [u.type, u.no, u.title])).toEqual([
+      ['基礎教學', 1, '介面'],
+      ['基礎教學', 2, '節點'],
+      ['案例分享', 1, '業界案例'],
+    ]);
+    const no = (l: any) => after.units.find((u: any) => u.id === l.unit)?.no ?? null;
+    expect(after.lessons.map(no)).toEqual([1, 2, 1, null]);
+
+    // without units in the file they stay, and sessions name them by number
+    expect(await db.call('oh_admin_lessons_import', { p_token: admin, p: { sessions: [lesson({ unit: 2 })] } })).toEqual({ count: 1 });
+    const kept = await db.call('oh_lessons');
+    expect(kept.units).toHaveLength(3);
+    expect(kept.units.find((u: any) => u.id === kept.lessons[0].unit).title).toBe('節點');
+
+    // a unit that is not there, or a bad unit, changes nothing
+    const before = await db.call('oh_lessons');
+    await expectCode(db.call('oh_admin_lessons_import', { p_token: admin, p: { sessions: [lesson(), lesson({ date: '2027-01-07', unit: 3 })] } }), 'IMPORT_ROW', '2');
+    await expectCode(db.call('oh_admin_lessons_import', { p_token: admin, p: { sessions: [lesson({ unit: 'one' })] } }), 'IMPORT_ROW', '1');
+    await expectCode(db.call('oh_admin_lessons_import', { p_token: admin, p: { units: [{ type: '基礎教學', title: '' }], sessions: [] } }), 'IMPORT_UNIT', '1');
+    await expectCode(
+      db.call('oh_admin_lessons_import', { p_token: admin, p: { units: [{ type: '基礎教學', title: 'a' }, { type: '基礎教學', no: 1, title: 'b' }], sessions: [] } }),
+      'IMPORT_UNIT',
+      '2',
+    );
+    await expectCode(db.call('oh_admin_lessons_import', { p_token: admin, p: { units: [{ type: '進階', title: 'a' }], sessions: [] } }), 'IMPORT_UNIT', '1');
+    await expectCode(db.call('oh_admin_lessons_import', { p_token: admin, p: { units: 'all', sessions: [] } }), 'VALIDATION', 'units');
+    expect(await db.call('oh_lessons')).toEqual(before);
+    // an empty list clears them
+    await db.call('oh_admin_lessons_import', { p_token: admin, p: { units: [], sessions: [lesson()] } });
+    expect(await units()).toEqual([]);
+  });
+
+  it('keeps the table private', async () => {
+    await db.sql('set role anon');
+    await expect(db.sql('select * from app.lesson_units')).rejects.toThrow(/permission denied/);
+    await expect(db.sql(`select app.cn_num(1)`)).rejects.toThrow(/permission denied/);
+    await db.sql('reset role');
+    const n = await db.one(`select app.cn_num(1) a, app.cn_num(10) b, app.cn_num(12) c, app.cn_num(20) d, app.cn_num(21) e`);
+    expect(n).toEqual({ a: '一', b: '十', c: '十二', d: '二十', e: '二十一' });
   });
 });

@@ -1,5 +1,5 @@
 // The TD 專班 timetable: grouping, colours and the schedule.json format.
-import type { Lesson, LessonInfo } from '../api/types';
+import type { Lesson, LessonInfo, LessonUnit } from '../api/types';
 import { addDays, instant, isoDow, minutes, toUTC } from './time';
 
 /** Teachers in order of their first lesson; the index picks a colour. */
@@ -71,15 +71,64 @@ export function shiftMonth(ym: string, n: number): string {
   return `${Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, '0')}`;
 }
 
+const CN = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+
+/** 1 → 一, 10 → 十, 12 → 十二, 21 → 二十一 (as app.cn_num) */
+export function cnNum(n: number): string {
+  if (n >= 1 && n <= 9) return CN[n];
+  if (n === 10) return '十';
+  if (n >= 11 && n <= 19) return `十${CN[n - 10]}`;
+  if (n >= 20 && n <= 99) return `${CN[Math.floor(n / 10)]}十${CN[n % 10]}`;
+  return String(n);
+}
+
+/** "基礎教學（一）" */
+export function unitLabel(u: Pick<LessonUnit, 'type' | 'no'>): string {
+  return `${u.type}（${cnNum(u.no)}）`;
+}
+
+/** "（一）" */
+export function unitNo(u: Pick<LessonUnit, 'no'>): string {
+  return `（${cnNum(u.no)}）`;
+}
+
+export function unitOf(l: Lesson, units: LessonUnit[]): LessonUnit | undefined {
+  return l.unit == null ? undefined : units.find((u) => u.id === l.unit);
+}
+
+/** "基礎教學（一）", or just the type when the lesson is in no unit. */
+export function lessonKind(l: Lesson, u?: LessonUnit): string {
+  return u ? unitLabel(u) : l.type;
+}
+
+/** What a lesson is called on its own: the unit's topic, then its own title. */
+export function lessonTitle(l: Lesson, u?: LessonUnit): string {
+  return [u?.title, l.title].filter(Boolean).join('｜');
+}
+
+/** A calendar event's title, as the feed writes it (app.lesson_summary). */
+export function lessonSummary(l: Lesson, u?: LessonUnit): string {
+  return `TD ${lessonKind(l, u)}${u?.title ?? ''} · ${l.teacher}${l.title ? `｜${l.title}` : ''}`;
+}
+
+/** A calendar event's description, as the feed writes it (app.lesson_details). */
+export function lessonDetails(l: Lesson, u?: LessonUnit): string {
+  return [u && unitLabel(u) + u.title, u?.topic, l.title, l.topic, `講師：${l.teacher}　類型：${l.type}`].filter(Boolean).join('\n\n');
+}
+
 /** The whole timetable as a schedule.json document (importable again). */
-export function scheduleJson(info: LessonInfo, types: string[], lessons: Lesson[]) {
+export function scheduleJson(info: LessonInfo, types: string[], lessons: Lesson[], units: LessonUnit[] = []) {
   return {
     title: info.title,
     subtitle: info.subtitle,
     place: info.place,
     note: info.note,
     types,
-    sessions: lessons.map(({ date, start, end, teacher, type, title, topic }) => ({ date, start, end, teacher, type, title, topic })),
+    units: units.map(({ type, no, title, topic }) => ({ type, no, title, topic })),
+    sessions: lessons.map((l) => {
+      const { date, start, end, teacher, type, title, topic } = l;
+      return { date, start, end, teacher, type, unit: unitOf(l, units)?.no ?? null, title, topic };
+    }),
   };
 }
 
@@ -96,12 +145,12 @@ function utcStamp(ms: number): string {
 }
 
 /** A link that opens Google Calendar with this one lesson filled in. */
-export function googleCalendarUrl(l: Lesson, tz: string, place: string): string {
+export function googleCalendarUrl(l: Lesson, tz: string, place: string, unit?: LessonUnit): string {
   const u = new URL('https://calendar.google.com/calendar/render');
   u.searchParams.set('action', 'TEMPLATE');
-  u.searchParams.set('text', `TD ${l.type} · ${l.teacher}${l.title ? `｜${l.title}` : ''}`);
+  u.searchParams.set('text', lessonSummary(l, unit));
   u.searchParams.set('dates', `${utcStamp(lessonStart(l, tz))}/${utcStamp(lessonEnd(l, tz))}`);
-  u.searchParams.set('details', [l.title, l.topic, `講師：${l.teacher}　類型：${l.type}`].filter(Boolean).join('\n\n'));
+  u.searchParams.set('details', lessonDetails(l, unit));
   if (place) u.searchParams.set('location', place);
   return u.toString();
 }

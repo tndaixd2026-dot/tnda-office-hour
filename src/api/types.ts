@@ -314,6 +314,18 @@ export interface Lesson {
   end: string;
   teacher: string;
   type: string;
+  /** LessonUnit id, of a unit of the same type */
+  unit: number | null;
+  title: string;
+  topic: string;
+}
+
+/** 基礎教學（一）: a numbered part of one lesson type */
+export interface LessonUnit {
+  id: number;
+  type: string;
+  /** 1, 2, 3 … within its type */
+  no: number;
   title: string;
   topic: string;
 }
@@ -329,6 +341,7 @@ export interface LessonsState {
   clock: ClockInfo;
   info: LessonInfo;
   types: string[];
+  units: LessonUnit[];
   lessons: Lesson[];
 }
 

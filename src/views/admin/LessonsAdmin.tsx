@@ -1,10 +1,10 @@
 import { useId, useRef, useState } from 'preact/hooks';
-import type { Lesson, LessonInfo, LessonsState } from '../../api/types';
+import type { Lesson, LessonInfo, LessonsState, LessonUnit } from '../../api/types';
 import { clock, useApi, useBusy, useLive } from '../../app/hooks';
 import { errorText } from '../../app/messages';
 import { download } from '../../lib/files';
-import { byWeek, monday, scheduleJson, teacherList } from '../../lib/lessons';
-import { addDays, hm, md, minutes } from '../../lib/time';
+import { byWeek, monday, scheduleJson, teacherList, unitLabel, unitNo, unitOf } from '../../lib/lessons';
+import { addDays, DOW, hm, isoDow, md, minutes } from '../../lib/time';
 import { confirm, openDialog } from '../../ui/dialog';
 import { Icon } from '../../ui/icons';
 import { Btn, CopyBtn, Empty, Field, Loading, Place, Seg } from '../../ui/kit';
@@ -29,8 +29,13 @@ export function LessonsAdmin() {
   const { call } = useApi();
   const { run } = useBusy();
   const [showPast, setShowPast] = useState(false);
+  const [tab, setTab] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   if (!st) return error ? <ErrorState onRetry={reload} /> : <Loading />;
+
+  const kind = st.types.includes(tab) ? tab : st.types[0];
+  const kindUnits = st.units.filter((u) => u.type === kind);
+  const loose = st.lessons.filter((l) => l.type === kind && l.unit == null).length;
 
   const teachers = teacherList(st.lessons);
   const publicUrl = `${siteUrl()}#/td`;
@@ -60,12 +65,37 @@ export function LessonsAdmin() {
   };
 
   const edit = (l: Lesson | null) =>
-    openDialog(l ? '編輯課程' : '新增一堂課', (close) => <LessonForm l={l} teachers={teachers} types={st.types} close={close} submit={submit} remove={remove} />);
+    openDialog(l ? '編輯課程' : '新增一堂課', (close) => (
+      <LessonForm l={l} teachers={teachers} types={st.types} units={st.units} close={close} submit={submit} remove={remove} />
+    ));
+
+  const removeUnit = async (u: LessonUnit) => {
+    const n = st.lessons.filter((l) => l.unit === u.id).length;
+    const ok = await confirm({
+      title: `刪除${unitLabel(u)}？`,
+      body: n ? `這個單元的 ${n} 堂課會變成還沒分單元，課本身不會刪掉。後面的單元編號會往前補` : '後面的單元編號會往前補',
+      ok: '刪除',
+      danger: true,
+    });
+    if (!ok) return false;
+    const r = await run('del', () => call('oh_admin_lesson_unit_delete', { p_id: u.id }), { ok: '已刪除單元' });
+    if (r) reload();
+    return Boolean(r);
+  };
+
+  const editUnit = (u: LessonUnit | null) =>
+    openDialog(
+      u ? `編輯${unitLabel(u)}` : `新增${kind}單元`,
+      (close) => (
+        <UnitForm u={u} type={u?.type ?? kind} units={st.units} lessons={st.lessons} today={clock.today} close={close} submit={submit} remove={removeUnit} />
+      ),
+      { wide: 'wide' },
+    );
 
   const editInfo = () => openDialog('編輯頁面資訊', (close) => <InfoForm info={st.info} close={close} submit={submit} />);
 
   const exportJson = () =>
-    download('td-schedule.json', `${JSON.stringify(scheduleJson(st.info, st.types, st.lessons), null, 1)}\n`, 'application/json;charset=utf-8');
+    download('td-schedule.json', `${JSON.stringify(scheduleJson(st.info, st.types, st.lessons, st.units), null, 1)}\n`, 'application/json;charset=utf-8');
 
   const importJson = async (e: Event) => {
     const input = e.currentTarget as HTMLInputElement;
@@ -84,16 +114,17 @@ export function LessonsAdmin() {
       toast('檔案裡找不到 sessions 清單', { kind: 'error' });
       return;
     }
+    const units = (doc as { units?: unknown } | null)?.units;
     const ok = await confirm({
       title: `用檔案裡的 ${list.length} 堂取代目前的 ${st.lessons.length} 堂？`,
-      body: '目前的課會全部換掉，公開頁和訂閱的行事曆也會跟著更新。想留一份備份，先按「下載 JSON」',
+      body: `目前的課會全部換掉${Array.isArray(units) ? `，單元也會換成檔案裡的 ${units.length} 個` : ''}，公開頁和訂閱的行事曆也會跟著更新。想留一份備份，先按「下載 JSON」`,
       ok: '匯入',
       danger: true,
     });
     if (!ok) return;
-    const r = await run('import', () => call<{ count: number }>('oh_admin_lessons_import', { p: doc }));
+    const r = await run('import', () => call<{ count: number; units?: number }>('oh_admin_lessons_import', { p: doc }));
     if (r) {
-      toast(`已匯入 ${r.count} 堂`);
+      toast(r.units == null ? `已匯入 ${r.count} 堂` : `已匯入 ${r.count} 堂和 ${r.units} 個單元`);
       reload();
     }
   };
@@ -140,6 +171,44 @@ export function LessonsAdmin() {
         </dl>
       </section>
 
+      <section class="section" aria-labelledby="l-units">
+        <div class="section-head">
+          <h2 id="l-units">單元</h2>
+          <span class="grow" />
+          <Btn variant="primary" size="sm" icon="plus" onClick={() => editUnit(null)}>
+            新增單元
+          </Btn>
+        </div>
+        <p class="muted small" style={{ maxWidth: '600px' }}>
+          每種類型可以分成幾個單元，例如基礎教學（一）、（二）。勾選每個單元在哪幾堂上，學生會在公開頁看到單元的主題和說明
+        </p>
+        <Seg label="單元的類型" value={kind} onChange={setTab} options={st.types.map((t) => ({ value: t, label: t }))} />
+        {kindUnits.length === 0 ? (
+          <Empty icon="layers" title={`${kind}還沒有單元`}>
+            按「新增單元」，填主題，再勾選要上這個單元的日期
+          </Empty>
+        ) : (
+          <div class="list">
+            {kindUnits.map((u) => {
+              const mine = st.lessons.filter((l) => l.unit === u.id);
+              return (
+                <button type="button" key={u.id} class="li top ls-edit" onClick={() => editUnit(u)}>
+                  <span class="ls-no">{unitNo(u)}</span>
+                  <span class="grow stack tight">
+                    <span class="ls-title">{u.title}</span>
+                    <span class="small muted">{mine.length ? `${mine.map((l) => `${md(l.date)} ${l.teacher}`).join('、')} 共 ${mine.length} 堂` : '還沒勾日期'}</span>
+                  </span>
+                  <Icon name="edit" class="ls-pen" />
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {st.lessons.some((l) => l.type === kind) && (
+          <p class="small muted">{loose ? `${kind}還沒分單元的課：${loose} 堂` : `${kind}的課都分好單元了`}</p>
+        )}
+      </section>
+
       <section class="section" aria-labelledby="l-list">
         <div class="section-head">
           <h2 id="l-list">課程</h2>
@@ -170,7 +239,15 @@ export function LessonsAdmin() {
                 </h3>
                 <div class="list">
                   {w.lessons.map((l) => (
-                    <LessonRow key={l.id} l={l} teachers={teachers} today={clock.today} phase={l.date < clock.today ? 'past' : 'later'} onClick={() => edit(l)} />
+                    <LessonRow
+                      key={l.id}
+                      l={l}
+                      unit={unitOf(l, st.units)}
+                      teachers={teachers}
+                      today={clock.today}
+                      phase={l.date < clock.today ? 'past' : 'later'}
+                      onClick={() => edit(l)}
+                    />
                   ))}
                 </div>
               </div>
@@ -184,7 +261,7 @@ export function LessonsAdmin() {
           <h2 id="l-io">匯入與匯出</h2>
         </div>
         <p class="muted small" style={{ maxWidth: '600px' }}>
-          檔案格式和原本的 schedule.json 一樣。匯入會取代目前全部的課，適合新學期一次換掉整份課表
+          檔案格式和原本的 schedule.json 一樣，另外多了單元。匯入會取代目前全部的課，適合新學期一次換掉整份課表
         </p>
         <div class="row wrap">
           <Btn icon="download" onClick={exportJson}>
@@ -204,6 +281,7 @@ function LessonForm({
   l,
   teachers,
   types,
+  units,
   close,
   submit,
   remove,
@@ -211,6 +289,7 @@ function LessonForm({
   l: Lesson | null;
   teachers: string[];
   types: string[];
+  units: LessonUnit[];
   close: () => void;
   submit: Submit;
   remove: (l: Lesson) => Promise<boolean>;
@@ -220,10 +299,12 @@ function LessonForm({
   const [end, setEnd] = useState(l?.end ?? '22:00');
   const [teacher, setTeacher] = useState(l?.teacher ?? teachers[0] ?? '');
   const [type, setType] = useState(l?.type ?? types[0]);
+  const [unit, setUnit] = useState<number | null>(l?.unit ?? null);
   const [title, setTitle] = useState(l?.title ?? '');
   const [topic, setTopic] = useState(l?.topic ?? '');
   const [err, setErr] = useState<string | null>(null);
   const listId = useId();
+  const typeUnits = units.filter((u) => u.type === type);
   const badTime = end <= start;
   const ready = !badTime && Boolean(date) && teacher.trim().length > 0;
 
@@ -241,7 +322,7 @@ function LessonForm({
       onSubmit={async (e) => {
         e.preventDefault();
         if (!ready) return;
-        const msg = await submit('oh_admin_lesson_save', { p: { id: l?.id ?? null, date, start, end, teacher, type, title, topic } }, l ? '已儲存' : '已新增');
+        const msg = await submit('oh_admin_lesson_save', { p: { id: l?.id ?? null, date, start, end, teacher, type, unit, title, topic } }, l ? '已儲存' : '已新增');
         if (msg) setErr(msg);
         else close();
       }}
@@ -305,9 +386,31 @@ function LessonForm({
       </datalist>
       <div class="field">
         <span class="label">類型</span>
-        <Seg label="類型" value={type} onChange={setType} options={types.map((t) => ({ value: t, label: t }))} />
+        <Seg
+          label="類型"
+          value={type}
+          onChange={(t) => {
+            // a unit belongs to one type
+            setType(t);
+            setUnit(t === l?.type ? l.unit : null);
+          }}
+          options={types.map((t) => ({ value: t, label: t }))}
+        />
       </div>
-      <Field label="標題" optional help="空白時公開頁會顯示「標題待定」" count={title.length} max={80}>
+      {typeUnits.length > 0 && (
+        <Field label="單元" optional>
+          <select class="select" value={unit ?? ''} onChange={(e) => setUnit(Number((e.target as HTMLSelectElement).value) || null)}>
+            <option value="">還沒分單元</option>
+            {typeUnits.map((u) => (
+              <option key={u.id} value={u.id}>
+                {unitNo(u)}
+                {u.title}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
+      <Field label="標題" optional help={typeUnits.length ? '有單元時可以留空，公開頁會顯示單元主題' : '空白時公開頁會顯示「標題待定」'} count={title.length} max={80}>
         <input class="input" maxLength={80} value={title} onInput={(e) => setTitle((e.target as HTMLInputElement).value)} />
       </Field>
       <Field label="內容說明" optional count={topic.length} max={1000}>
@@ -329,6 +432,130 @@ function LessonForm({
             }}
           >
             刪除
+          </button>
+        )}
+        <button type="button" class="btn" onClick={close}>
+          取消
+        </button>
+        <button type="submit" class="btn primary" disabled={!ready}>
+          儲存
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function UnitForm({
+  u,
+  type,
+  units,
+  lessons,
+  today,
+  close,
+  submit,
+  remove,
+}: {
+  u: LessonUnit | null;
+  type: string;
+  units: LessonUnit[];
+  lessons: Lesson[];
+  today: string;
+  close: () => void;
+  submit: Submit;
+  remove: (u: LessonUnit) => Promise<boolean>;
+}) {
+  const others = units.filter((x) => x.type === type && x.id !== u?.id);
+  const places = others.length + 1;
+  const [no, setNo] = useState(u?.no ?? places);
+  const [title, setTitle] = useState(u?.title ?? '');
+  const [topic, setTopic] = useState(u?.topic ?? '');
+  const [picked, setPicked] = useState<number[]>(() => (u ? lessons.filter((l) => l.unit === u.id).map((l) => l.id) : []));
+  const [err, setErr] = useState<string | null>(null);
+  const choices = lessons.filter((l) => l.type === type);
+  const ready = title.trim().length > 0;
+  const toggle = (id: number) => {
+    setPicked(picked.includes(id) ? picked.filter((x) => x !== id) : [...picked, id]);
+    setErr(null);
+  };
+
+  return (
+    <form
+      class="stack"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        if (!ready) return;
+        const msg = await submit('oh_admin_lesson_unit_save', { p: { id: u?.id ?? null, type, no, title, topic, lessons: picked } }, u ? '已儲存單元' : '已新增單元');
+        if (msg) setErr(msg);
+        else close();
+      }}
+    >
+      <h2>{u ? `編輯${unitLabel(u)}` : `新增${type}單元`}</h2>
+      {places > 1 && (
+        <Field label="編號" help="改編號時，其他單元會跟著往前或往後移">
+          <select class="select" value={no} onChange={(e) => setNo(Number((e.target as HTMLSelectElement).value))}>
+            {Array.from({ length: places }, (_, i) => (
+              <option key={i} value={i + 1}>
+                {unitLabel({ type, no: i + 1 })}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
+      <Field label="主題" count={title.length} max={80}>
+        <input
+          class="input"
+          required
+          maxLength={80}
+          value={title}
+          onInput={(e) => {
+            setTitle((e.target as HTMLInputElement).value);
+            setErr(null);
+          }}
+        />
+      </Field>
+      <Field label="說明" optional help="學生會在公開頁看到，例如這個單元會教什麼、要先準備什麼" count={topic.length} max={1000}>
+        <textarea class="textarea" maxLength={1000} value={topic} onInput={(e) => setTopic((e.target as HTMLTextAreaElement).value)} />
+      </Field>
+      <fieldset class="field" style={{ border: 0, padding: 0, margin: 0 }}>
+        <legend class="label" style={{ padding: 0, marginBottom: '6px' }}>
+          哪幾堂上這個單元
+        </legend>
+        {choices.length === 0 ? (
+          <p class="small muted">還沒有{type}的課，先在「課程」新增</p>
+        ) : (
+          <div class="ls-picks">
+            {choices.map((l) => {
+              const other = l.unit != null && l.unit !== u?.id ? units.find((x) => x.id === l.unit) : undefined;
+              return (
+                <label class={`check ${l.date < today ? 'muted' : ''}`} key={l.id}>
+                  <input type="checkbox" checked={picked.includes(l.id)} onChange={() => toggle(l.id)} />
+                  <span>
+                    {md(l.date)} {DOW[isoDow(l.date)]} <span class="mono">{l.start}</span> {l.teacher}
+                    {other && !picked.includes(l.id) && <span class="tiny muted">　目前在{unitNo(other)}</span>}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        )}
+        <span class="help">已勾 {picked.length} 堂。一堂課只屬於一個單元，勾選別的單元的課會把它移過來</span>
+      </fieldset>
+      {err && (
+        <p class="small" role="alert" style={{ color: 'var(--danger)' }}>
+          {err}
+        </p>
+      )}
+      <div class="actions">
+        {u && (
+          <button
+            type="button"
+            class="btn danger"
+            style={{ marginRight: 'auto' }}
+            onClick={async () => {
+              if (await remove(u)) close();
+            }}
+          >
+            刪除單元
           </button>
         )}
         <button type="button" class="btn" onClick={close}>

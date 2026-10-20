@@ -13,6 +13,8 @@ interface Entry {
 
 const dialogs = store<Entry[]>([]);
 let seq = 0;
+/** Where focus goes back to once the dialog that held it has closed (Dialogs). */
+let restore: HTMLElement | null = null;
 
 export function openDialog<T>(
   label: string,
@@ -30,8 +32,7 @@ function closeDialog(id: number, value?: unknown) {
   dialogs.set((l) => l.filter((d) => d.id !== id));
   if (e) {
     e.resolve(value);
-    const stillOpen = dialogs.get().length > 0;
-    if (!stillOpen && e.opener instanceof HTMLElement && document.contains(e.opener)) e.opener.focus({ preventScroll: true });
+    if (e.opener instanceof HTMLElement) restore = e.opener;
   }
 }
 
@@ -162,14 +163,27 @@ function DialogFrame({ entry, top }: { entry: Entry; top: boolean }) {
 
 export function Dialogs() {
   const list = dialogs.use();
-  useEffect(() => {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
     document.body.style.overflow = list.length ? 'hidden' : '';
-  }, [list.length]);
+    // Everything behind the top dialog is out of reach, for the keyboard
+    // and screen readers alike, until it closes. Toasts still speak.
+    const box = ref.current;
+    if (!box) return;
+    for (const el of box.parentElement?.children ?? []) {
+      if (el !== box && el instanceof HTMLElement && !el.classList.contains('toasts')) el.inert = list.length > 0;
+    }
+    const scrims = [...box.children] as HTMLElement[];
+    scrims.forEach((el, i) => (el.inert = i < scrims.length - 1));
+    // only now can focus go back to what opened the dialog
+    if (restore && document.contains(restore) && !restore.closest('[inert]')) restore.focus({ preventScroll: true });
+    restore = null;
+  }, [list]);
   return (
-    <>
+    <div ref={ref}>
       {list.map((e, i) => (
         <DialogFrame key={e.id} entry={e} top={i === list.length - 1} />
       ))}
-    </>
+    </div>
   );
 }

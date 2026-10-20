@@ -52,6 +52,10 @@ for (const scheme of ['light', 'dark']) {
   await page.waitForTimeout(400);
   await scan(page, 'admin TD lesson form');
   await page.getByRole('dialog').getByRole('button', { name: '取消' }).click();
+  await page.locator('section[aria-labelledby="l-units"] .ls-edit').first().click();
+  await page.waitForTimeout(400);
+  await scan(page, 'admin TD unit form');
+  await page.getByRole('dialog').getByRole('button', { name: '取消' }).click();
   await page.getByRole('link', { name: '打開公開頁' }).click();
   await page.getByRole('heading', { name: '全部課程' }).waitFor();
   await page.waitForTimeout(700);
@@ -65,6 +69,9 @@ for (const scheme of ['light', 'dark']) {
   await page.getByRole('button', { name: '依講師', exact: true }).click();
   await page.waitForTimeout(400);
   await scan(page, 'TD timetable (by teacher)');
+  await page.getByRole('button', { name: '依單元', exact: true }).click();
+  await page.waitForTimeout(400);
+  await scan(page, 'TD timetable (by unit)');
   await page.locator('.ls-row').first().click();
   await page.waitForTimeout(400);
   await scan(page, 'TD lesson details');

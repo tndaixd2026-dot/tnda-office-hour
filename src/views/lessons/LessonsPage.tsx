@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
-import type { Lesson, LessonInfo, LessonsState } from '../../api/types';
+import type { Lesson, LessonInfo, LessonsState, LessonUnit } from '../../api/types';
 import { clock, useLive, useMedia, useTick } from '../../app/hooks';
 import { useApp } from '../../app/session';
 import { local } from '../../app/store';
@@ -9,14 +9,20 @@ import {
   byWeek,
   googleCalendarUrl,
   hourRange,
+  lessonDetails,
   lessonEnd,
+  lessonKind,
   lessonStart,
+  lessonSummary,
+  lessonTitle,
   monday,
   monthDays,
   nextLesson,
   shiftMonth,
   teacherClass,
   teacherList,
+  unitNo,
+  unitOf,
 } from '../../lib/lessons';
 import { addDays, dayLabel, daysBetween, DOW, DOW_SHORT, isoDow, md, minutes, relativeDay, tzNote, untilText } from '../../lib/time';
 import { openDialog } from '../../ui/dialog';
@@ -25,8 +31,8 @@ import { Btn, CopyBtn, Empty, LiveBadge, Loading, Place, Seg } from '../../ui/ki
 import { ErrorState } from '../student/StudentApp';
 import { LessonRow, type LessonPhase } from './parts';
 
-type View = 'list' | 'week' | 'month' | 'teacher';
-const VIEWS: View[] = ['list', 'week', 'month', 'teacher'];
+type View = 'list' | 'week' | 'month' | 'teacher' | 'unit';
+const VIEWS: View[] = ['list', 'week', 'month', 'teacher', 'unit'];
 const VIEW_KEY = 'oh.td.view';
 
 /** The TD 專班 timetable at #/td (or #/td/<teacher>): public, no sign-in, live. */
@@ -93,7 +99,9 @@ function LessonsHome({ st, initialWho }: { st: LessonsState; initialWho?: string
   });
   const [who, setWho] = useState(initialWho && teachers.includes(initialWho) ? initialWho : '');
   const [kind, setKind] = useState('');
-  const shown = st.lessons.filter((l) => (!who || l.teacher === who) && (!kind || l.type === kind));
+  const [unit, setUnit] = useState<number | null>(null);
+  const kindUnits = kind ? st.units.filter((u) => u.type === kind) : [];
+  const shown = st.lessons.filter((l) => (!who || l.teacher === who) && (!kind || l.type === kind) && (unit == null || l.unit === unit));
   const next = nextLesson(shown, now, tz);
   const first = st.lessons[0];
   const last = st.lessons[st.lessons.length - 1];
@@ -107,7 +115,11 @@ function LessonsHome({ st, initialWho }: { st: LessonsState; initialWho?: string
     setWho(t);
     rememberTeacher(t);
   };
-  const props: ViewProps = { lessons: shown, all: st.lessons, teachers, now, tz, open };
+  const pickKind = (k: string) => {
+    setKind(k);
+    setUnit(null);
+  };
+  const props: ViewProps = { lessons: shown, all: st.lessons, types: st.types, units: st.units, teachers, now, tz, open };
 
   return (
     <main class="page enter">
@@ -135,7 +147,7 @@ function LessonsHome({ st, initialWho }: { st: LessonsState; initialWho?: string
       )}
 
       {next ? (
-        <NextLesson l={next} now={now} tz={tz} place={st.info.place} onSubscribe={subscribe} />
+        <NextLesson l={next} unit={unitOf(next, st.units)} now={now} tz={tz} place={st.info.place} onSubscribe={subscribe} />
       ) : (
         st.lessons.length > 0 && (
           <div class="hero calm">
@@ -157,6 +169,7 @@ function LessonsHome({ st, initialWho }: { st: LessonsState; initialWho?: string
                 { value: 'week', label: '週曆' },
                 { value: 'month', label: '月曆' },
                 { value: 'teacher', label: '依講師' },
+                { value: 'unit', label: '依單元' },
               ]}
             />
             <Btn size="sm" icon="calendar" onClick={subscribe}>
@@ -183,12 +196,26 @@ function LessonsHome({ st, initialWho }: { st: LessonsState; initialWho?: string
             {st.types.length > 1 && (
               <div class="row wrap" role="group" aria-label="只看哪種類型">
                 <span class="tiny muted">類型</span>
-                <button type="button" class="ls-tg plain" aria-pressed={!kind} onClick={() => setKind('')}>
+                <button type="button" class="ls-tg plain" aria-pressed={!kind} onClick={() => pickKind('')}>
                   全部
                 </button>
                 {st.types.map((t) => (
-                  <button type="button" key={t} class="ls-tg plain" aria-pressed={kind === t} onClick={() => setKind(t)}>
+                  <button type="button" key={t} class="ls-tg plain" aria-pressed={kind === t} onClick={() => pickKind(t)}>
                     {t}
+                  </button>
+                ))}
+              </div>
+            )}
+            {kindUnits.length > 0 && (
+              <div class="row wrap" role="group" aria-label="只看哪個單元">
+                <span class="tiny muted">單元</span>
+                <button type="button" class="ls-tg plain" aria-pressed={unit == null} onClick={() => setUnit(null)}>
+                  全部
+                </button>
+                {kindUnits.map((u) => (
+                  <button type="button" key={u.id} class="ls-tg plain" aria-pressed={unit === u.id} onClick={() => setUnit(u.id)}>
+                    {unitNo(u)}
+                    {u.title}
                   </button>
                 ))}
               </div>
@@ -202,7 +229,7 @@ function LessonsHome({ st, initialWho }: { st: LessonsState; initialWho?: string
           </Empty>
         ) : shown.length === 0 ? (
           <Empty icon="calendar" title="沒有符合篩選的課">
-            把講師或類型換回「全部」看看
+            把講師、類型或單元換回「全部」看看
           </Empty>
         ) : view === 'week' ? (
           <WeekView {...props} />
@@ -210,6 +237,8 @@ function LessonsHome({ st, initialWho }: { st: LessonsState; initialWho?: string
           <MonthView {...props} />
         ) : view === 'teacher' ? (
           <TeacherView {...props} />
+        ) : view === 'unit' ? (
+          <UnitView {...props} />
         ) : (
           <ListView {...props} />
         )}
@@ -218,9 +247,25 @@ function LessonsHome({ st, initialWho }: { st: LessonsState; initialWho?: string
   );
 }
 
-function NextLesson({ l, now, tz, place, onSubscribe }: { l: Lesson; now: number; tz: string; place: string; onSubscribe: () => void }) {
+function NextLesson({
+  l,
+  unit,
+  now,
+  tz,
+  place,
+  onSubscribe,
+}: {
+  l: Lesson;
+  unit?: LessonUnit;
+  now: number;
+  tz: string;
+  place: string;
+  onSubscribe: () => void;
+}) {
   const live = lessonStart(l, tz) <= now;
   const rel = relativeDay(l.date, clock.today);
+  const title = lessonTitle(l, unit);
+  const kind = lessonKind(l, unit);
   return (
     <section class="hero" aria-labelledby="ls-next">
       <div class="row between wrap">
@@ -242,11 +287,16 @@ function NextLesson({ l, now, tz, place, onSubscribe }: { l: Lesson; now: number
         </span>
       </div>
       <div class="stack tight">
-        <p class="title-m">{l.title || l.type}</p>
+        <p class="title-m">{title || kind}</p>
         <p style={{ opacity: 0.85 }}>
           {l.teacher}
-          {l.title ? ` · ${l.type}` : ''}
+          {title ? ` · ${kind}` : ''}
         </p>
+        {unit?.topic && (
+          <p class="small pre" style={{ opacity: 0.85 }}>
+            {unit.topic}
+          </p>
+        )}
         {l.topic && (
           <p class="small pre" style={{ opacity: 0.85 }}>
             {l.topic}
@@ -273,17 +323,37 @@ function NextLesson({ l, now, tz, place, onSubscribe }: { l: Lesson; now: number
 interface ViewProps {
   lessons: Lesson[];
   all: Lesson[];
+  types: string[];
+  units: LessonUnit[];
   teachers: string[];
   now: number;
   tz: string;
   open: (l: Lesson) => void;
 }
 
-function Rows({ list, teachers, now, tz, open }: { list: Lesson[] } & Omit<ViewProps, 'lessons' | 'all'>) {
+function Rows({
+  list,
+  units,
+  inUnit,
+  teachers,
+  now,
+  tz,
+  open,
+}: { list: Lesson[]; inUnit?: boolean } & Pick<ViewProps, 'units' | 'teachers' | 'now' | 'tz' | 'open'>) {
   return (
     <div class="list">
       {list.map((l) => (
-        <LessonRow key={l.id} l={l} teachers={teachers} today={clock.today} phase={phaseOf(l, now, tz)} icon="right" onClick={() => open(l)} />
+        <LessonRow
+          key={l.id}
+          l={l}
+          unit={unitOf(l, units)}
+          inUnit={inUnit}
+          teachers={teachers}
+          today={clock.today}
+          phase={phaseOf(l, now, tz)}
+          icon="right"
+          onClick={() => open(l)}
+        />
       ))}
     </div>
   );
@@ -328,7 +398,7 @@ function startWeek(all: Lesson[]): string {
   return monday(today < first ? first : today > last ? last : today);
 }
 
-function WeekView({ lessons, all, teachers, now, tz, open }: ViewProps) {
+function WeekView({ lessons, all, units, teachers, now, tz, open }: ViewProps) {
   const phone = useMedia('(max-width: 640px)');
   const [start, setStart] = useState(() => startWeek(all));
   const firstWeek = monday(all[0]?.date ?? clock.today);
@@ -370,7 +440,7 @@ function WeekView({ lessons, all, teachers, now, tz, open }: ViewProps) {
                     {relativeDay(d, clock.today) ? `${relativeDay(d, clock.today)}・` : ''}
                     {dayLabel(d)}
                   </h4>
-                  <Rows list={inWeek.filter((l) => l.date === d)} teachers={teachers} now={now} tz={tz} open={open} />
+                  <Rows list={inWeek.filter((l) => l.date === d)} units={units} teachers={teachers} now={now} tz={tz} open={open} />
                 </div>
               ))}
           </div>
@@ -398,6 +468,8 @@ function WeekView({ lessons, all, teachers, now, tz, open }: ViewProps) {
                     const top = (minutes(l.start) - h0 * 60) / 60;
                     const height = (minutes(l.end) - minutes(l.start)) / 60;
                     const phase = phaseOf(l, now, tz);
+                    const unit = unitOf(l, units);
+                    const title = lessonTitle(l, unit);
                     return (
                       <button
                         type="button"
@@ -411,9 +483,9 @@ function WeekView({ lessons, all, teachers, now, tz, open }: ViewProps) {
                           {l.start}–{l.end}
                         </span>
                         <span class="n">
-                          {l.teacher} · {l.type}
+                          {l.teacher} · {lessonKind(l, unit)}
                         </span>
-                        {l.title && <span class="ttl">{l.title}</span>}
+                        {title && <span class="ttl">{title}</span>}
                       </button>
                     );
                   })}
@@ -426,7 +498,7 @@ function WeekView({ lessons, all, teachers, now, tz, open }: ViewProps) {
   );
 }
 
-function MonthView({ lessons, all, teachers, now, tz, open }: ViewProps) {
+function MonthView({ lessons, all, units, teachers, now, tz, open }: ViewProps) {
   const today = clock.today;
   const first = all[0]?.date ?? today;
   const last = all[all.length - 1]?.date ?? today;
@@ -472,7 +544,7 @@ function MonthView({ lessons, all, teachers, now, tz, open }: ViewProps) {
               {list.map((l) => (
                 <span class={`ls-m ${teacherClass(teachers, l.teacher)}`} key={l.id}>
                   <span class="t">{l.start}</span> <span class="nm">{l.teacher}</span>
-                  <span class="sr-only"> {l.type}</span>
+                  <span class="sr-only"> {lessonKind(l, unitOf(l, units))}</span>
                 </span>
               ))}
             </>
@@ -493,14 +565,14 @@ function MonthView({ lessons, all, teachers, now, tz, open }: ViewProps) {
         <h3 class="title-s">
           {md(sel)}（{DOW[isoDow(sel)]}）
         </h3>
-        {picked.length ? <Rows list={picked} teachers={teachers} now={now} tz={tz} open={open} /> : <p class="muted small">這天沒有課</p>}
+        {picked.length ? <Rows list={picked} units={units} teachers={teachers} now={now} tz={tz} open={open} /> : <p class="muted small">這天沒有課</p>}
       </div>
     </div>
   );
 }
 
 /** One column per teacher: how many lessons of each type, and what is coming up. */
-function TeacherView({ lessons, teachers, now, tz, open }: ViewProps) {
+function TeacherView({ lessons, units, teachers, now, tz, open }: ViewProps) {
   const [showPast, setShowPast] = useState(false);
   const who = teachers.filter((t) => lessons.some((l) => l.teacher === t));
   return (
@@ -523,7 +595,7 @@ function TeacherView({ lessons, teachers, now, tz, open }: ViewProps) {
                 </span>
               </h3>
               <p class="tiny muted">{counts.join('　')}</p>
-              {list.length ? <Rows list={list} teachers={teachers} now={now} tz={tz} open={open} /> : <p class="muted small">沒有還沒上的課</p>}
+              {list.length ? <Rows list={list} units={units} teachers={teachers} now={now} tz={tz} open={open} /> : <p class="muted small">沒有還沒上的課</p>}
             </section>
           );
         })}
@@ -532,25 +604,116 @@ function TeacherView({ lessons, teachers, now, tz, open }: ViewProps) {
   );
 }
 
-// ---------- one lesson ----------
-function openLesson(l: Lesson, st: LessonsState, teachers: string[]) {
-  openDialog(`${md(l.date)} ${l.start} ${l.teacher}`, (close) => <LessonDetail l={l} info={st.info} tz={st.clock.tz} teachers={teachers} close={close} />);
+/** Each type's units in order, with what they cover and when; then the lessons not in one yet. */
+function UnitView({ lessons, all, types, units, teachers, now, tz, open }: ViewProps) {
+  // units with no lessons yet show only when nothing is filtered out
+  const everything = lessons.length === all.length;
+  const rest = { units, teachers, now, tz, open };
+  const shown = types.filter((t) => lessons.some((l) => l.type === t) || (everything && units.some((u) => u.type === t)));
+  return (
+    <div class="stack loose">
+      {!units.length && <p class="muted small">還沒有分單元，先依類型列出全部的課</p>}
+      {shown.map((t) => {
+        const mine = units.filter((u) => u.type === t && (lessons.some((l) => l.unit === u.id) || (everything && !all.some((l) => l.unit === u.id))));
+        const loose = lessons.filter((l) => l.type === t && unitOf(l, units) == null);
+        return (
+          <section class="stack" key={t} aria-labelledby={`ls-k-${t}`}>
+            <h3 class="title-s" id={`ls-k-${t}`}>
+              {t}
+              {mine.length > 0 && <span class="small muted"> {mine.length} 個單元</span>}
+            </h3>
+            {mine.map((u) => {
+              const list = lessons.filter((l) => l.unit === u.id);
+              const ahead = list.filter((l) => lessonEnd(l, tz) > now).length;
+              return (
+                <article class="card tight stack tight ls-unit" key={u.id} aria-labelledby={`ls-u-${u.id}`}>
+                  <h4 class="ls-wh" id={`ls-u-${u.id}`}>
+                    <span>
+                      {unitNo(u)}
+                      {u.title}
+                    </span>
+                    <span class="small muted">{list.length ? `${list.length} 堂${ahead < list.length ? ` 還有 ${ahead} 堂` : ''}` : '日期待定'}</span>
+                  </h4>
+                  {u.topic && <p class="small pre">{u.topic}</p>}
+                  {list.length > 0 && <Rows list={list} inUnit {...rest} />}
+                </article>
+              );
+            })}
+            {loose.length > 0 && (
+              <div class="stack tight">
+                {mine.length > 0 && <h4 class="small muted">還沒分單元的課</h4>}
+                <Rows list={loose} {...rest} />
+              </div>
+            )}
+          </section>
+        );
+      })}
+    </div>
+  );
 }
 
-function LessonDetail({ l, info, tz, teachers, close }: { l: Lesson; info: LessonInfo; tz: string; teachers: string[]; close: () => void }) {
+// ---------- one lesson ----------
+function openLesson(l: Lesson, st: LessonsState, teachers: string[]) {
+  const unit = unitOf(l, st.units);
+  const siblings = unit ? st.lessons.filter((x) => x.unit === unit.id) : [];
+  openDialog(`${md(l.date)} ${l.start} ${l.teacher}`, (close) => (
+    <LessonDetail l={l} unit={unit} siblings={siblings} info={st.info} tz={st.clock.tz} teachers={teachers} close={close} />
+  ));
+}
+
+function LessonDetail({
+  l,
+  unit,
+  siblings,
+  info,
+  tz,
+  teachers,
+  close,
+}: {
+  l: Lesson;
+  unit?: LessonUnit;
+  siblings: Lesson[];
+  info: LessonInfo;
+  tz: string;
+  teachers: string[];
+  close: () => void;
+}) {
+  const title = lessonTitle(l, unit);
   return (
     <>
       <div class="stack tight">
         <p class="eyebrow">
           {dayLabel(l.date)} {l.start}–{l.end}
         </p>
-        <h2 class={l.title ? '' : 'muted'}>{l.title || '標題待定'}</h2>
+        <h2 class={title ? '' : 'muted'}>{title || '標題待定'}</h2>
       </div>
       <div class={`row wrap ${teacherClass(teachers, l.teacher)}`}>
         <span class="ls-who">{l.teacher}</span>
-        <span class="chip">{l.type}</span>
+        <span class="chip">{lessonKind(l, unit)}</span>
       </div>
+      {unit?.topic && (
+        <div class="card sunk tight stack tight">
+          <span class="eyebrow">單元說明</span>
+          <p class="small pre">{unit.topic}</p>
+        </div>
+      )}
       {l.topic && <p class="pre">{l.topic}</p>}
+      {siblings.length > 1 && (
+        <div class="stack tight">
+          <span class="eyebrow">這個單元的所有時段</span>
+          <ul class="ls-sib">
+            {siblings.map((x) => (
+              <li key={x.id} class={x.id === l.id ? 'cur' : ''}>
+                <span class="mono">
+                  {md(x.date)} {DOW[isoDow(x.date)]} {x.start}
+                </span>{' '}
+                {x.teacher}
+                {x.id === l.id && <span class="chip accent">這堂</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {info.place && (
         <p class="small row" style={{ gap: '6px' }}>
           <Icon name="pin" size={16} />
@@ -558,7 +721,7 @@ function LessonDetail({ l, info, tz, teachers, close }: { l: Lesson; info: Lesso
         </p>
       )}
       <div class="actions">
-        <a class="btn" href={googleCalendarUrl(l, tz, info.place)} target="_blank" rel="noopener noreferrer">
+        <a class="btn" href={googleCalendarUrl(l, tz, info.place, unit)} target="_blank" rel="noopener noreferrer">
           <Icon name="calendar" /> 加到 Google 日曆
         </a>
         <button type="button" class="btn primary" onClick={close}>
@@ -600,9 +763,9 @@ function LessonsCalendar({ st, initial, close }: { st: LessonsState; initial: st
           t: l.start,
           minutes: minutes(l.end) - minutes(l.start),
           tz: st.clock.tz,
-          title: `TD ${l.type} · ${l.teacher}${l.title ? `｜${l.title}` : ''}`,
+          title: lessonSummary(l, unitOf(l, st.units)),
           location: st.info.place,
-          description: [l.title, l.topic, `講師：${l.teacher}　類型：${l.type}`].filter(Boolean).join('\n\n'),
+          description: lessonDetails(l, unitOf(l, st.units)),
         })),
       who ? `${st.info.title} · ${who}` : st.info.title,
     );

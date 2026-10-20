@@ -2520,6 +2520,44 @@ table.t tr.mine td {
   margin-top: 2px;
 }
 
+/* units: （一） in the admin list, the lessons to tick, a unit's other times */
+.ls-no {
+  flex: 0 0 auto;
+  min-width: 3em;
+  font-weight: 800;
+}
+.ls-picks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(230px, 100%), 1fr));
+  gap: 0 16px;
+}
+.ls-picks .check {
+  font-size: 14px;
+}
+.ls-picks .check.muted {
+  color: var(--muted);
+}
+.ls-sib {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+}
+.ls-sib li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.ls-sib li.cur {
+  font-weight: 700;
+}
+.ls-unit > .list {
+  margin-top: 4px;
+}
+
 /* week: a time grid on wider screens (phones get a list per day) */
 .ls-wk-scroll {
   overflow-x: auto;
@@ -2711,6 +2749,10 @@ button.ls-day:hover {
   color: var(--ink-2);
 }
 @media (max-width: 640px) {
+  /* five views fit a phone */
+  .ls-tools .seg button {
+    padding: 2px 8px;
+  }
   .ls-dh {
     padding: 6px 0;
     text-align: center;

@@ -21,6 +21,9 @@ const FIELD: Record<string, string> = {
   lesson: '請確認日期、時間、講師和類型（結束要晚於開始，講師最多 20 字）',
   lesson_info: '標題需為 1–40 字，副標題最多 80 字，地點最多 200 字，公告最多 500 字',
   lessons: '檔案格式不對：需要有 sessions 清單，最多 500 堂',
+  units: '檔案格式不對：units 需要是清單，最多 200 個單元',
+  unit: '請輸入單元主題（最多 80 字），說明最多 1000 字',
+  unit_lessons: '有勾選的課已經被刪除或改了類型，請重新整理後再試',
   mail: '請輸入正確的 Email，稱呼最多 40 字',
   kind: '不支援的操作',
 };
@@ -66,7 +69,9 @@ export function errorText(e: unknown, s?: Pick<Settings, 'cancel_hours'>): strin
     case 'LESSON_CLASH':
       return `和 ${e.detail} 的課時間重疊，同一時間只能排一堂課`;
     case 'IMPORT_ROW':
-      return `第 ${e.detail} 堂的資料不正確，請確認日期、時間、講師和類型`;
+      return `第 ${e.detail} 堂的資料不正確，請確認日期、時間、講師、類型和單元`;
+    case 'IMPORT_UNIT':
+      return `第 ${e.detail} 個單元的資料不正確，請確認類型、編號和主題`;
     case 'NOT_FOUND':
       return '找不到這筆資料，可能已經被刪除或修改了';
     case 'SLOT_LATE':

@@ -293,6 +293,35 @@ try {
     await page.getByText('已更新頁面資訊').waitFor();
   });
 
+  await run('admin groups TD lessons into units', async () => {
+    await page.getByRole('heading', { name: '單元', exact: true }).waitFor();
+    await page.getByRole('group', { name: '單元的類型' }).getByRole('button', { name: '基礎教學' }).click();
+    await page.getByRole('button', { name: '新增單元' }).click();
+    const d = page.getByRole('dialog', { name: '新增基礎教學單元' });
+    await d.getByLabel('主題').fill('E2E 單元');
+    await d.getByLabel('說明').fill('E2E 單元說明：先裝好軟體');
+    await d.getByLabel('編號').selectOption({ label: '基礎教學（一）' });
+    const boxes = d.locator('.ls-picks input[type="checkbox"]');
+    await boxes.nth(0).check();
+    await boxes.nth(1).check();
+    await d.getByText('已勾 2 堂').waitFor();
+    await d.getByRole('button', { name: '儲存' }).click();
+    await page.getByText('已新增單元').waitFor();
+    // it went first, and the units after it moved down one
+    const units = page.locator('section[aria-labelledby="l-units"] .ls-edit');
+    check((await units.first().textContent()).includes('（一）E2E 單元'), 'the new unit should be first');
+    check((await units.nth(1).textContent()).startsWith('（二）'), 'the next unit should be renumbered');
+    // a lesson's own form picks its unit too
+    await unfoldPast();
+    await page.getByRole('button', { name: /E2E 加開/ }).click();
+    const e = page.getByRole('dialog', { name: '編輯課程' });
+    await e.getByLabel('單元').selectOption({ label: '（一）E2E 單元' });
+    await e.getByRole('button', { name: '儲存' }).click();
+    await page.getByText('已儲存').first().waitFor();
+    await page.getByRole('button', { name: /E2E 單元｜E2E 加開/ }).waitFor();
+    check((await units.first().textContent()).includes('共 3 堂'), 'the unit should now have three lessons');
+  });
+
   await run('the public TD page shows it, with filters and a month view', async () => {
     await page.getByRole('link', { name: '打開公開頁' }).click();
     await page.getByRole('heading', { name: '全部課程' }).waitFor();
@@ -321,6 +350,20 @@ try {
     await page.locator('.ls-cal').waitFor();
     await page.locator('button.ls-day').first().click();
     check((await page.locator('.ls-row').count()) > 0, 'the picked day should list its lessons');
+    // units: their topic and description, a filter, and every time of a unit in a lesson
+    await page.getByRole('button', { name: '依單元', exact: true }).click();
+    await page.getByRole('heading', { name: '（一）E2E 單元' }).waitFor();
+    await page.getByText('E2E 單元說明：先裝好軟體').first().waitFor();
+    const byKind = page.getByRole('group', { name: '只看哪種類型' });
+    await byKind.getByRole('button', { name: '基礎教學' }).click();
+    await page.getByRole('group', { name: '只看哪個單元' }).getByRole('button', { name: '（一）E2E 單元' }).click();
+    check((await page.locator('.ls-row').count()) === 3, 'the unit filter should leave its three lessons');
+    await page.locator('.ls-row').first().click();
+    const dlg = page.getByRole('dialog');
+    await dlg.getByText('單元說明', { exact: true }).waitFor();
+    check((await dlg.locator('.ls-sib li').count()) === 3, 'a lesson should list every time of its unit');
+    await dlg.getByRole('button', { name: '完成' }).click();
+    await byKind.getByRole('button', { name: '全部' }).click();
     await page.getByRole('button', { name: '清單', exact: true }).click();
     await page.getByRole('button', { name: '訂閱行事曆' }).first().click();
     await page.getByRole('dialog', { name: '訂閱行事曆' }).getByRole('button', { name: '完成' }).click();
@@ -341,10 +384,11 @@ try {
     const [file] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '下載 JSON' }).click()]);
     const doc = JSON.parse(await (await import('node:fs/promises')).readFile(await file.path(), 'utf8'));
     check(Array.isArray(doc.sessions) && doc.sessions.length > 80 && doc.sessions[0].date, 'export should be a schedule.json');
+    check(doc.units?.[0]?.title === 'E2E 單元' && doc.sessions[0].unit === 1, 'export should carry the units');
     doc.sessions = doc.sessions.slice(0, 3);
     await page.locator('input[type="file"]').setInputFiles({ name: 'td.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(doc)) });
     await page.getByRole('dialog', { name: /用檔案裡的 3 堂取代/ }).getByRole('button', { name: '匯入' }).click();
-    await page.getByText('已匯入 3 堂').waitFor();
+    await page.getByText(`已匯入 3 堂和 ${doc.units.length} 個單元`).waitFor();
     await page.getByText('共 3 堂').waitFor();
   });
 
@@ -407,7 +451,7 @@ try {
   await run('mobile TD timetable fits the screen', async () => {
     await m.page.evaluate(() => (location.hash = '#/td'));
     await m.page.getByRole('heading', { name: '全部課程' }).waitFor();
-    for (const view of ['週曆', '月曆', '依講師', '清單']) {
+    for (const view of ['週曆', '月曆', '依講師', '依單元', '清單']) {
       await m.page.getByRole('button', { name: view, exact: true }).click();
       const overflow = await m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
       check(overflow <= 0, `TD ${view} scrolls sideways by ${overflow}px`);
