@@ -7,6 +7,9 @@
 //                 that has some, only to the sending account; nothing is logged
 //   KIND=sample   the same, written from the demo's sessions (the site's demo
 //                 mode, run here in PGlite) with the real meeting room
+//   KIND=sample_all  a test email to every recipient on the 寄信通知 page,
+//                 switched on or not: each gets their own PMs' demo sessions,
+//                 marked 【測試】; nothing is logged
 //   SUPABASE_DB_PASSWORD, POOLER_HOST   or DATABASE_URL directly
 //   GMAIL_USER, GMAIL_APP_PASSWORD      the account that sends
 //   SEND_AT=09:00  wait for this time in Taipei first (at most an hour)
@@ -22,7 +25,7 @@ import nodemailer from 'nodemailer';
 import pg from 'pg';
 
 const on = (v) => v === '1' || v === 'true';
-const kind = ['remind', 'preview', 'test', 'sample'].includes(process.env.KIND) ? process.env.KIND : 'weekly';
+const kind = ['remind', 'preview', 'test', 'sample', 'sample_all'].includes(process.env.KIND) ? process.env.KIND : 'weekly';
 const dry = on(process.env.DRY_RUN);
 const force = on(process.env.FORCE);
 const test = on(process.env.MAIL_TEST);
@@ -61,6 +64,15 @@ const SAMPLE_NOTE =
   '<div style="margin-top:6px;">最上方的「一鍵把全部場次加到 Google 日曆」訂閱的是正式的行事曆（三位老師的全部場次），助教發布場次後就會自動出現；' +
   '每一場的「加入會議」和「加到 Google 日曆」可以直接試按，後者會打開 Google 日曆，按「儲存」才會加進去</div>' +
   '</td></tr></table>';
+
+const TEST_NOTE =
+  '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 0 12px;">' +
+  '<tr><td bgcolor="#fbf0dc" style="padding:14px 16px;border:1px solid #e9d3ad;border-radius:12px;background-color:#fbf0dc;font-size:14px;text-align:left;">' +
+  '<b>這是測試信，不用回覆。</b>用來確認您收得到 Office Hour 的通知、版面也正常。下面的場次、組別和題目都是示範資料，請不要加到日曆。' +
+  '<div style="margin-top:6px;">正式的信會在每週一 09:00 寄出，內容是當週實際排定的場次。最上方的「一鍵把全部場次加到 Google 日曆」是正式的訂閱連結，現在訂閱之後，場次排定時就會自動出現</div>' +
+  '</td></tr></table>';
+const TEST_TEXT =
+  '這是測試信，不用回覆。下面的場次、組別和題目都是示範資料，請不要加到日曆。正式的信會在每週一 09:00 寄出，內容是當週實際排定的場次。\n\n';
 
 /** The site's demo database: the same migrations, seed and demo data as
  *  demo mode (read from src/db/sql.ts, so the list is never copied). */
@@ -113,23 +125,34 @@ const weekOf = async (q, k) => (await q.query(`select (x - (extract(isodow from 
 const urls = [site, env.VITE_SUPABASE_URL, env.VITE_SUPABASE_KEY];
 let week;
 let list;
-if (kind === 'test' || kind === 'sample') {
+if (kind === 'test') {
   // the email with every PM's sessions, and only ever to the sending account
+  week = await weekOf(db, 'test');
+  const m = (await db.query(`select app.mail_message($1::date, '{}', null, $2, $3, $4) as v`, [week, ...urls])).rows[0].v;
+  list = [{ ...m, to: user, subject: `【測試】${m.subject}` }];
+} else if (kind === 'sample' || kind === 'sample_all') {
   const room = (await db.query('select location from app.settings where id = 1')).rows[0].location;
-  const q = kind === 'sample' ? await demoDb(room) : db;
+  const q = await demoDb(room);
   week = await weekOf(q, 'test');
-  const m = (await q.query(`select app.mail_message($1::date, '{}', $2, $3, $4, $5) as v`, [week, kind === 'sample' ? '叁式' : null, ...urls])).rows[0].v;
-  if (kind === 'sample') {
-    // subscribe to the real shared calendar, not the demo's (which the site does not know)
-    const feed = async (c) => (await c.query('select feed from app.teachers where team order by id limit 1')).rows[0]?.feed;
-    const [demo, real] = [await feed(q), await feed(db)];
-    if (demo && real) for (const k of ['html', 'text']) m[k] = m[k].split(demo).join(real);
-  }
-  list = [
+  // demo and real PMs are matched by name; the calendar links get the real
+  // feeds, since the site does not know the demo's
+  const demo = new Map((await q.query('select id, name, feed from app.teachers')).rows.map((t) => [t.name, t]));
+  const real = (await db.query('select id, name, feed from app.teachers')).rows;
+  const swap = (str) => real.reduce((acc, t) => (demo.get(t.name)?.feed && t.feed ? acc.split(demo.get(t.name).feed).join(t.feed) : acc), str);
+  const people =
     kind === 'sample'
-      ? { ...m, to: user, subject: `【範例】${m.subject}`, html: m.html.replace('<!--banner-->', SAMPLE_NOTE) }
-      : { ...m, to: user, subject: `【測試】${m.subject}` },
-  ];
+      ? [{ email: user, name: '叁式', teachers: [] }]
+      : (await db.query('select email, name, teachers from app.mail_recipients order by id')).rows;
+  list = [];
+  for (const r of people) {
+    const ids = r.teachers.map((id) => demo.get(real.find((t) => t.id === id)?.name)?.id).filter(Boolean);
+    const m = (await q.query(`select app.mail_message($1::date, $2::int[], $3, $4, $5, $6) as v`, [week, ids, r.name || null, ...urls])).rows[0].v;
+    list.push(
+      kind === 'sample'
+        ? { ...m, to: r.email, subject: `【範例】${m.subject}`, html: swap(m.html).replace('<!--banner-->', SAMPLE_NOTE), text: swap(m.text) }
+        : { ...m, to: r.email, subject: `【測試】${m.subject}`, html: swap(m.html).replace('<!--banner-->', TEST_NOTE), text: TEST_TEXT + swap(m.text) },
+    );
+  }
 } else {
   week = await weekOf(db, kind);
   list = (await db.query('select app.mail_outbox($1, $2::date, $3, $4, $5, $6, $7) as v', [kind, week, ...urls, user ?? null, force])).rows[0].v;
@@ -146,7 +169,7 @@ for (const [i, m] of list.entries()) {
   }
   try {
     await mailer.sendMail({ from: { name: '叁式 30 分鐘 一週三次', address: user }, to: m.to, subject: m.subject, html: m.html, text: m.text });
-    if (kind !== 'test' && kind !== 'sample') await db.query('select app.mail_sent($1, $2::date, $3, $4, $5)', [m.kind, m.week, m.to, m.subject, m.count]);
+    if (!['test', 'sample', 'sample_all'].includes(kind)) await db.query('select app.mail_sent($1, $2::date, $3, $4, $5)', [m.kind, m.week, m.to, m.subject, m.count]);
     console.log(`  sent ${label}`);
   } catch (e) {
     failed++;
