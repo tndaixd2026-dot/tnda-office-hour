@@ -116,6 +116,10 @@ describe('weekly email', () => {
     // what they want to ask, and the folder written out
     expect(prolong.html).toContain('想問的問題</p><p style="margin:2px 0 0;font-size:14px;line-height:1.6;color:#161514;white-space:pre-line;">動線要單向嗎？\n排隊區放哪裡</p>');
     expect(prolong.html).toContain('>drive.google.com/x</a>');
+    // colours survive mail apps that drop CSS backgrounds: bgcolor too, and buttons are table cells
+    expect(office.html).toContain('<td bgcolor="#161514" style="padding:26px 24px 24px;background-color:#161514;');
+    expect(office.html).toMatch(/<td bgcolor="#161514" style="background-color:#161514;[^"]*"><a href="https:\/\/calendar\.google\.com/);
+    expect(office.html).not.toMatch(/background:#/);
     expect(prolong.text).toContain('  想問的問題：動線要單向嗎？\n    排隊區放哪裡\n  檔案：https://drive.google.com/x\n');
     // one Google Calendar button per session, with the right UTC times
     expect(prolong.html.match(/action=TEMPLATE/g)).toHaveLength(1);
@@ -149,7 +153,7 @@ describe('weekly email', () => {
     expect(p.html).toContain('prolong@example.com（Prolong）：【Office Hour】Prolong 本週 1 場（10/19–10/25）');
     expect(p.html).toContain('第 1 組「南宜到達的斜上方」');
     expect(p.html).toContain('</ul><div style="margin-top:8px;">要調整場次');
-    expect(p.html.indexOf('這是預覽')).toBeLessThan(p.html.indexOf('max-width:600px;background:#ffffff')); // above the card
+    expect(p.html.indexOf('這是預覽')).toBeLessThan(p.html.indexOf('max-width:600px;background-color:#ffffff')); // above the card
     // with no admins' mailbox it goes to the sending account
     await db.call('oh_admin_mail_save', { p_token: admin, p_kind: 'settings', p: { ta_email: '' } });
     expect((await outbox('preview'))[0].to).toBe('sender@example.com');

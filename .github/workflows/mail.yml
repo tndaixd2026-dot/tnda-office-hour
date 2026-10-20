@@ -16,9 +16,9 @@ on:
   workflow_dispatch:
     inputs:
       kind:
-        description: 'test：只寄一封測試信給寄件的 Gmail 自己；remind：寄審核提醒給助教信箱；preview：寄預覽給助教信箱；weekly：寄給所有收件人'
+        description: 'test：用正式場次寄一封測試信給寄件的 Gmail 自己；sample：用示範場次寄一封範例信給自己；remind：寄審核提醒給助教信箱；preview：寄預覽給助教信箱；weekly：寄給所有收件人'
         type: choice
-        options: [test, remind, preview, weekly]
+        options: [test, sample, remind, preview, weekly]
         default: test
       force:
         description: '這週已經寄過也再寄一次'
