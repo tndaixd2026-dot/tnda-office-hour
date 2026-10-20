@@ -81,9 +81,13 @@ describe('weekly email', () => {
     expect(office.html).toContain('第 1 組「南宜到達的斜上方」');
     expect(office.html).toContain('第 2 組「看到太陽就知道完蛋了」');
     expect(prolong.html).not.toContain('南宜到達的斜上方');
+    // several PMs: a chip per PM with their count; one PM: no chips
+    expect(office.html).toContain('>Joseph 1 場</span>');
+    expect(office.html).toContain('>Prolong 1 場</span>');
+    expect(prolong.html).not.toContain('>Prolong 1 場</span>');
     expect(tim.html).toContain('這週沒有排到 Office Hour');
     // student text is escaped
-    expect(prolong.html).toContain('題目：展場動線 &amp; &lt;排隊&gt;');
+    expect(prolong.html).toContain('<b>展場動線 &amp; &lt;排隊&gt;</b>');
     expect(prolong.html).not.toContain('<排隊>');
     // one Google Calendar button per session, with the right UTC times
     expect(prolong.html.match(/action=TEMPLATE/g)).toHaveLength(1);
@@ -117,6 +121,7 @@ describe('weekly email', () => {
     expect(p.html).toContain('prolong@example.com（Prolong）：【Office Hour】Prolong 本週 1 場（10/19–10/25）');
     expect(p.html).toContain('第 1 組「南宜到達的斜上方」');
     expect(p.html).toContain('</ul><div style="margin-top:8px;">要調整場次');
+    expect(p.html.indexOf('這是預覽')).toBeLessThan(p.html.indexOf('max-width:600px;background:#ffffff')); // above the card
     // with no admins' mailbox it goes to the sending account
     await db.call('oh_admin_mail_save', { p_token: admin, p_kind: 'settings', p: { ta_email: '' } });
     expect((await outbox('preview'))[0].to).toBe('sender@example.com');
