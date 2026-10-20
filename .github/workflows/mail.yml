@@ -28,6 +28,10 @@ on:
         description: '只列出要寄的信，不真的寄出'
         type: boolean
         default: false
+      only:
+        description: 'sample_all 只寄給這個稱呼的收件人（例如 叁式公司），空白就寄給全部'
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -55,6 +59,7 @@ jobs:
           SEND_AT: ${{ github.event_name == 'schedule' && (github.event.schedule == '38 3 * * 0' && '12:00' || (github.event.schedule == '38 9 * * 0' && '18:00' || '09:00')) || '' }}
           FORCE: ${{ inputs.force && '1' || '' }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
+          ONLY: ${{ inputs.only }}
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}

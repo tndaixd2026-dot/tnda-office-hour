@@ -10,6 +10,7 @@
 //   KIND=sample_all  a test email to every recipient on the 寄信通知 page,
 //                 switched on or not: each gets their own PMs' demo sessions,
 //                 marked 【測試】; nothing is logged
+//   ONLY=叁式公司  with sample_all: just the recipients with this 稱呼
 //   SUPABASE_DB_PASSWORD, POOLER_HOST   or DATABASE_URL directly
 //   GMAIL_USER, GMAIL_APP_PASSWORD      the account that sends
 //   SEND_AT=09:00  wait for this time in Taipei first (at most an hour)
@@ -29,6 +30,7 @@ const kind = ['remind', 'preview', 'test', 'sample', 'sample_all'].includes(proc
 const dry = on(process.env.DRY_RUN);
 const force = on(process.env.FORCE);
 const test = on(process.env.MAIL_TEST);
+const only = process.env.ONLY?.trim() || null;
 const env = Object.fromEntries(
   readFileSync(new URL('../.env.production', import.meta.url), 'utf8')
     .split('\n')
@@ -142,7 +144,11 @@ if (kind === 'test') {
   const people =
     kind === 'sample'
       ? [{ email: user, name: '叁式', teachers: [] }]
-      : (await db.query('select email, name, teachers from app.mail_recipients order by id')).rows;
+      : (await db.query('select email, name, teachers from app.mail_recipients order by id')).rows.filter((r) => !only || r.name === only);
+  if (kind === 'sample_all' && only && people.length === 0) {
+    console.error(`::error::No recipient is called ${only} on the 寄信通知 page`);
+    process.exit(1);
+  }
   list = [];
   for (const r of people) {
     const ids = r.teachers.map((id) => demo.get(real.find((t) => t.id === id)?.name)?.id).filter(Boolean);
