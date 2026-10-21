@@ -23,6 +23,7 @@ const FIELD: Record<string, string> = {
   lessons: '檔案格式不對：需要有 sessions 清單，最多 500 堂',
   units: '檔案格式不對：units 需要是清單，最多 200 個單元',
   unit: '單元主題最多 80 字，說明最多 1000 字',
+  ratio: '比例要是 0–20 的整數，至少一種類型大於 0',
   unit_lessons: '有勾選的課已經被刪除或改了類型，請重新整理後再試',
   mail: '請輸入正確的 Email，稱呼最多 40 字',
   kind: '不支援的操作',
@@ -70,6 +71,8 @@ export function errorText(e: unknown, s?: Pick<Settings, 'cancel_hours'>): strin
       return `和 ${e.detail} 的課時間重疊，同一時間只能排一堂課`;
     case 'IMPORT_ROW':
       return `第 ${e.detail} 堂的資料不正確，請確認日期、時間、講師、類型和單元`;
+    case 'LESSON_FIXED':
+      return `${e.detail} 的課已經開始或已確定，不能改類型，請重新整理後再試`;
     case 'IMPORT_UNIT':
       return `第 ${e.detail} 個單元的資料不正確，請確認類型、編號和主題`;
     case 'NOT_FOUND':

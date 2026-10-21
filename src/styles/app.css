@@ -2592,6 +2592,32 @@ table.t tr.mine td {
 .ls-unit {
   border-left: 4px solid var(--kc);
 }
+/* the mix of types: one bar, the numbers written beside it */
+.ls-mix {
+  display: flex;
+  gap: 2px;
+  height: 10px;
+  border-radius: 99px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.ls-mix > span {
+  flex-basis: 0;
+  background: var(--kc);
+}
+.ls-ratio {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.ls-changes summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 4px 0;
+}
+.ls-changes .ls-sib {
+  margin-top: 8px;
+}
 .ls-dates {
   display: flex;
   flex-wrap: wrap;

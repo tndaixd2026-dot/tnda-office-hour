@@ -16,6 +16,7 @@ export function LessonRow({
   l,
   unit,
   inUnit = false,
+  showConfirmed = false,
   types,
   teachers,
   today,
@@ -26,6 +27,8 @@ export function LessonRow({
   l: Lesson;
   unit?: LessonUnit;
   inUnit?: boolean;
+  /** the admin's list says which lessons are 已確定 */
+  showConfirmed?: boolean;
   types: string[];
   teachers: string[];
   today: string;
@@ -52,6 +55,7 @@ export function LessonRow({
           </span>
           <span class="ls-who">{l.teacher}</span>
           {!inUnit && <span class="chip kind">{lessonKind(l, unit)}</span>}
+          {showConfirmed && l.confirmed && <span class="chip ok">已確定</span>}
           {phase === 'live' ? <span class="chip accent">上課中</span> : phase === 'later' && rel && <span class="chip accent">{rel}</span>}
         </span>
         {(title || !inUnit) && <span class={`ls-title ${title ? '' : 'muted'}`}>{title || '標題待定'}</span>}

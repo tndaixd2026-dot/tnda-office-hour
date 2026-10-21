@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Lesson } from '../src/api/types';
 import {
+  apportion,
   byWeek,
   cnNum,
   googleCalendarUrl,
@@ -10,6 +11,8 @@ import {
   lessonTitle,
   monthDays,
   nextLesson,
+  planRatio,
+  ratioOf,
   scheduleJson,
   shiftMonth,
   teacherClass,
@@ -23,7 +26,7 @@ import { expectCode, makeDb, type TestDb } from './helpers';
 
 describe('TD lesson helpers', () => {
   const L = (id: number, date: string, start: string, teacher: string): Lesson => ({
-    id, date, start, end: `${String(Number(start.slice(0, 2)) + 1).padStart(2, '0')}:00`, teacher, type: '基礎教學', unit: null, title: '', topic: '',
+    id, date, start, end: `${String(Number(start.slice(0, 2)) + 1).padStart(2, '0')}:00`, teacher, type: '基礎教學', unit: null, confirmed: false, title: '', topic: '',
   });
   const list = [L(1, '2026-10-26', '21:00', '浡崴'), L(2, '2026-10-27', '21:00', '哲瑜'), L(3, '2026-11-08', '10:00', '哲瑜'), L(4, '2026-11-09', '21:00', '浡崴')];
 
@@ -70,8 +73,11 @@ describe('TD lesson helpers', () => {
     const t = teacherList(list);
     expect(t).toEqual(['浡崴', '哲瑜']);
     expect([teacherClass(t, '浡崴'), teacherClass(t, '哲瑜')]).toEqual(['tc0', 'tc1']);
-    const doc = scheduleJson({ title: 'T', subtitle: 'S', place: '', note: '' }, ['基礎教學'], list);
-    expect(doc.sessions[0]).toEqual({ date: '2026-10-26', start: '21:00', end: '22:00', teacher: '浡崴', type: '基礎教學', unit: null, title: '', topic: '' });
+    const doc = scheduleJson({ title: 'T', subtitle: 'S', place: '', note: '', ratio: [2, 1, 1] }, ['基礎教學'], list);
+    expect(doc.ratio).toEqual([2, 1, 1]);
+    expect(doc.sessions[0]).toEqual({
+      date: '2026-10-26', start: '21:00', end: '22:00', teacher: '浡崴', type: '基礎教學', unit: null, confirmed: false, title: '', topic: '',
+    });
     expect(doc.sessions[0]).not.toHaveProperty('id');
     expect(doc.units).toEqual([]);
   });
@@ -92,6 +98,77 @@ describe('TD lesson helpers', () => {
     const u = new URL(googleCalendarUrl(l, 'Asia/Taipei', '', unit));
     expect(u.searchParams.get('text')).toBe('TD 基礎教學（二）粒子 · 浡崴｜補課');
     expect(u.searchParams.has('location')).toBe(false);
+  });
+});
+
+describe('TD type ratio', () => {
+  const tz = 'Asia/Taipei';
+  const types = ['基礎教學', '案例分享', '駐村創作'];
+  // twelve evenings from 11/2, all 基礎教學 to start with
+  const days = Array.from({ length: 12 }, (_, i) => `2026-11-${String(2 + i).padStart(2, '0')}`);
+  const make = (patch: (l: Lesson, i: number) => Partial<Lesson> = () => ({})): Lesson[] =>
+    days.map((date, i) => {
+      const l: Lesson = { id: i + 1, date, start: '21:00', end: '22:00', teacher: '浡崴', type: '基礎教學', unit: null, confirmed: false, title: '', topic: '' };
+      return { ...l, ...patch(l, i) };
+    });
+  const before = instant('2026-11-01', '12:00', tz);
+  const types_ = (plan: ReturnType<typeof planRatio>, list: Lesson[]) =>
+    list.map((l) => plan.changes.find((c) => c.lesson.id === l.id)?.to ?? l.type).map((t) => t.slice(0, 1)).join('');
+
+  it('shares lessons out by largest remainder', () => {
+    expect(apportion(12, [2, 1, 1])).toEqual([6, 3, 3]);
+    expect(apportion(10, [1, 1, 1])).toEqual([4, 3, 3]);
+    expect(apportion(7, [0, 1, 2])).toEqual([0, 2, 5]);
+    expect(apportion(5, [0, 0, 0])).toEqual([0, 0, 0]);
+    expect(apportion(0, [1, 1])).toEqual([0, 0]);
+    expect(ratioOf([33, 27, 24])).toEqual([11, 9, 8]);
+    expect(ratioOf([0, 0, 0])).toEqual([1, 1, 1]);
+    expect(ratioOf([41, 2, 0])).toEqual([20, 1, 0]);
+  });
+
+  it('changes as few lessons as it can, spread over the weeks', () => {
+    const list = make();
+    const plan = planRatio(list, types, [2, 1, 1], before, tz);
+    expect(plan.before).toEqual([12, 0, 0]);
+    expect(plan.after).toEqual([6, 3, 3]);
+    expect(plan.changes).toHaveLength(6);
+    // every other lesson moves, the two other types taking turns
+    expect(types_(plan, list)).toBe('基案基駐基案基駐基案基駐');
+    // the same ratio again changes nothing
+    const done = list.map((l) => ({ ...l, type: plan.changes.find((c) => c.lesson.id === l.id)?.to ?? l.type }));
+    expect(planRatio(done, types, [2, 1, 1], before, tz).changes).toEqual([]);
+    expect(planRatio(done, types, [4, 2, 2], before, tz).changes).toEqual([]);
+  });
+
+  it('leaves lessons that have started, and confirmed ones, as they are', () => {
+    const list = make((_, i) => ({ confirmed: i === 1 || i === 3 }));
+    // the first two have started by 11/3 21:30
+    const now = instant('2026-11-03', '21:30', tz);
+    const plan = planRatio(list, types, [0, 1, 0], now, tz);
+    expect([plan.past, plan.upcoming, plan.confirmed]).toEqual([2, 10, 1]);
+    const moved = plan.changes.map((c) => c.lesson.id);
+    expect(moved).not.toContain(1);
+    expect(moved).not.toContain(2);
+    expect(moved).not.toContain(4);
+    expect(moved).toHaveLength(9);
+    expect(plan.after).toEqual([1, 9, 0]);
+  });
+
+  it('counts confirmed lessons towards the mix', () => {
+    // three confirmed 案例分享 already cover that share
+    const list = make((_, i) => (i < 3 ? { type: '案例分享', confirmed: true } : {}));
+    const plan = planRatio(list, types, [2, 1, 1], before, tz);
+    expect(plan.after).toEqual([6, 3, 3]);
+    expect(plan.changes.every((c) => c.to === '駐村創作')).toBe(true);
+  });
+
+  it('moves lessons without a unit first', () => {
+    const list = make((_, i) => (i % 2 === 0 ? { unit: 1 } : {}));
+    const plan = planRatio(list, types, [1, 1, 0], before, tz);
+    expect(plan.changes).toHaveLength(6);
+    expect(plan.changes.every((c) => c.lesson.unit == null)).toBe(true);
+    // with more to move than lessons outside units, some in a unit go too
+    expect(planRatio(list, types, [0, 1, 0], before, tz).changes).toHaveLength(12);
   });
 });
 
@@ -131,7 +208,7 @@ describe('TD lessons', () => {
     expect(r.lessons.filter((l: any) => l.type === '駐村創作')).toHaveLength(24);
     expect(r.lessons).toHaveLength(84);
     expect(r.lessons[0]).toEqual({
-      id: r.lessons[0].id, date: '2026-10-26', start: '21:00', end: '22:00', teacher: '浡崴', type: '基礎教學', unit: null, title: '', topic: '',
+      id: r.lessons[0].id, date: '2026-10-26', start: '21:00', end: '22:00', teacher: '浡崴', type: '基礎教學', unit: null, confirmed: false, title: '', topic: '',
     });
     expect(r.lessons.at(-1).date).toBe('2027-01-02');
     expect(r.clock.today).toBe('2026-10-19');
@@ -203,7 +280,7 @@ describe('TD lessons', () => {
     const r = await db.call('oh_admin_lessons_info', {
       p_token: admin, p: { subtitle: ' TNDA 115-1 ', place: 'https://meet.google.com/abc-defg-hij', note: '每堂都會錄影\n\n\n可以回放' },
     });
-    expect(r).toEqual({ title: 'TD 專班課表', subtitle: 'TNDA 115-1', place: 'https://meet.google.com/abc-defg-hij', note: '每堂都會錄影\n\n可以回放' });
+    expect(r).toEqual({ title: 'TD 專班課表', subtitle: 'TNDA 115-1', place: 'https://meet.google.com/abc-defg-hij', note: '每堂都會錄影\n\n可以回放', ratio: null });
     await expectCode(db.call('oh_admin_lessons_info', { p_token: admin, p: { title: '' } }), 'VALIDATION', 'lesson_info');
     await expectCode(db.call('oh_admin_lessons_info', { p_token: admin, p: { title: 'x'.repeat(41) } }), 'VALIDATION', 'lesson_info');
     expect((await db.call('oh_lessons')).info.title).toBe('TD 專班課表');
@@ -330,7 +407,7 @@ describe('TD units', () => {
     // what the outline migration does, run again on a type that has two
     await fresh.sql("delete from app.lesson_units where kind = '基礎教學' and sort > 2");
     await fresh.sql("update app.lesson_units set title = '已寫好' where kind = '基礎教學'");
-    const outline = MIGRATIONS[MIGRATIONS.length - 1].split('select app.lesson_units_renumber();')[0];
+    const outline = MIGRATIONS.find((m) => m.includes('-- ten per type'))!.split('select app.lesson_units_renumber();')[0];
     await fresh.pg.exec(outline.slice(outline.indexOf('-- ten per type')));
     const units = (await fresh.call('oh_lessons')).units.filter((u: any) => u.type === '基礎教學');
     expect(units.map((u: any) => `${u.no}${u.title}`)).toEqual(['1已寫好', '2已寫好', '3', '4', '5', '6', '7', '8', '9', '10']);
@@ -517,5 +594,100 @@ describe('TD units', () => {
     await db.sql('reset role');
     const n = await db.one(`select app.cn_num(1) a, app.cn_num(10) b, app.cn_num(12) c, app.cn_num(20) d, app.cn_num(21) e`);
     expect(n).toEqual({ a: '一', b: '十', c: '十二', d: '二十', e: '二十一' });
+  });
+});
+
+describe('TD type ratio in the database', () => {
+  let db: TestDb;
+  let admin: string;
+  let student: string;
+  const all = async () => (await db.call('oh_lessons')).lessons;
+  const at = async (date: string, start: string) => (await all()).find((l: any) => l.date === date && l.start === start);
+
+  beforeAll(async () => {
+    db = await makeDb();
+    // 10/26 21:00 has started
+    await db.setNow('2026-10-26T21:30:00+08:00');
+    const c = await db.codes();
+    admin = (await db.call('oh_join', { p_code: c.admin })).token;
+    student = (await db.call('oh_join', { p_code: c.groups[2], p_name: '小晴' })).token;
+  });
+
+  it('marks a lesson confirmed, and an edit that leaves it out keeps it', async () => {
+    const l = await at('2026-10-27', '21:00');
+    expect(l.confirmed).toBe(false);
+    const { id, unit, confirmed, ...p } = l;
+    expect((await db.call('oh_admin_lesson_save', { p_token: admin, p: { ...p, id, confirmed: true } })).confirmed).toBe(true);
+    expect((await db.call('oh_admin_lesson_save', { p_token: admin, p: { ...p, id, title: '確定了' } })).confirmed).toBe(true);
+    await expectCode(db.call('oh_admin_lesson_save', { p_token: admin, p: { ...p, id, confirmed: 'yes' } }), 'VALIDATION', 'lesson');
+    expect((await db.call('oh_lessons')).info.ratio).toBeNull();
+  });
+
+  it('re-types lessons to the ratio, all or nothing', async () => {
+    const started = await at('2026-10-26', '21:00');
+    const confirmed = await at('2026-10-27', '21:00');
+    const free = await at('2026-11-02', '21:00');
+    const later = await at('2026-11-03', '21:00');
+    const units = (await db.call('oh_lessons')).units;
+    await db.call('oh_admin_lesson_unit_save', { p_token: admin, p: { id: units[0].id, title: '介面', lessons: [free.id] } });
+    const ratio = [2, 1, 1];
+
+    await expectCode(db.call('oh_admin_lessons_retype', { p_token: student, p: { ratio, changes: [] } }), 'FORBIDDEN');
+    // started and confirmed lessons keep their type, and then nothing changes at all
+    await expectCode(
+      db.call('oh_admin_lessons_retype', { p_token: admin, p: { ratio, changes: [{ id: later.id, type: '駐村創作' }, { id: started.id, type: '案例分享' }] } }),
+      'LESSON_FIXED',
+      '10/26 21:00 浡崴',
+    );
+    await expectCode(db.call('oh_admin_lessons_retype', { p_token: admin, p: { ratio, changes: [{ id: confirmed.id, type: '案例分享' }] } }), 'LESSON_FIXED', '10/27 21:00 哲瑜');
+    expect((await at('2026-11-03', '21:00')).type).toBe('基礎教學');
+    await expectCode(db.call('oh_admin_lessons_retype', { p_token: admin, p: { ratio, changes: [{ id: 999999, type: '案例分享' }] } }), 'NOT_FOUND', 'lesson');
+
+    const r = await db.call('oh_admin_lessons_retype', {
+      p_token: admin, p: { ratio, changes: [{ id: free.id, type: '案例分享' }, { id: later.id, type: '基礎教學' }] },
+    });
+    // only a real change counts, and a lesson that changes type leaves its unit
+    expect(r).toEqual({ count: 1 });
+    expect(await at('2026-11-02', '21:00')).toMatchObject({ type: '案例分享', unit: null });
+    expect((await db.call('oh_lessons')).info.ratio).toEqual([2, 1, 1]);
+    const log = await db.one("select data from app.events where kind = 'config.lessons.ratio' order by id desc limit 1");
+    expect(log.data).toEqual({ ratio: [2, 1, 1], count: 1 });
+  });
+
+  it('checks the ratio and the changes', async () => {
+    const free = await at('2026-11-02', '21:00');
+    const bad = [
+      { ratio: [0, 0, 0] },
+      { ratio: [1, 1] },
+      { ratio: [1, 1, 21] },
+      { ratio: [1, -1, 1] },
+      { ratio: [1.5, 1, 1] },
+      { ratio: ['1', 1, 1] },
+      { ratio: null },
+      { ratio: [1, 1, 1], changes: 'all' },
+      { ratio: [1, 1, 1], changes: [{ id: free.id, type: '進階課' }] },
+      { ratio: [1, 1, 1], changes: [{ id: 'x', type: '案例分享' }] },
+    ];
+    for (const p of bad) await expectCode(db.call('oh_admin_lessons_retype', { p_token: admin, p }), 'VALIDATION', 'ratio');
+    // the ratio alone may change
+    expect(await db.call('oh_admin_lessons_retype', { p_token: admin, p: { ratio: [0, 3, 1] } })).toEqual({ count: 0 });
+    expect((await db.call('oh_lessons')).info.ratio).toEqual([0, 3, 1]);
+  });
+
+  it('exports and imports the ratio and confirmed lessons', async () => {
+    const st = await db.call('oh_lessons');
+    const doc = scheduleJson(st.info, st.types, st.lessons, st.units);
+    expect(doc.ratio).toEqual([0, 3, 1]);
+    expect(doc.sessions.find((x) => x.date === '2026-10-27')?.confirmed).toBe(true);
+    await db.call('oh_admin_lessons_import', { p_token: admin, p: { ...doc, ratio: [1, 1, 1] } });
+    const back = await db.call('oh_lessons');
+    expect(back.info.ratio).toEqual([1, 1, 1]);
+    expect(back.lessons.filter((l: any) => l.confirmed).map((l: any) => l.date)).toEqual(['2026-10-27']);
+    await expectCode(db.call('oh_admin_lessons_import', { p_token: admin, p: { ratio: [9, 9], sessions: [] } }), 'VALIDATION', 'ratio');
+    await expectCode(db.call('oh_admin_lessons_import', { p_token: admin, p: { sessions: [lesson({ confirmed: 'yes' })] } }), 'IMPORT_ROW', '1');
+    // a file without them keeps the ratio and confirms nothing
+    await db.call('oh_admin_lessons_import', { p_token: admin, p: { sessions: [lesson()] } });
+    expect((await db.call('oh_lessons')).info.ratio).toEqual([1, 1, 1]);
+    expect((await all())[0].confirmed).toBe(false);
   });
 });

@@ -1,9 +1,9 @@
 import { useRef, useState } from 'preact/hooks';
 import type { Lesson, LessonInfo, LessonsState, LessonUnit } from '../../api/types';
-import { clock, useApi, useBusy, useLive } from '../../app/hooks';
+import { clock, useApi, useBusy, useLive, useTick } from '../../app/hooks';
 import { errorText } from '../../app/messages';
 import { download } from '../../lib/files';
-import { byWeek, kindClass, monday, scheduleJson, teacherClass, teacherList, unitLabel, unitNo, unitOf } from '../../lib/lessons';
+import { byWeek, kindClass, monday, planRatio, ratioOf, scheduleJson, teacherClass, teacherList, unitLabel, unitNo, unitOf } from '../../lib/lessons';
 import { addDays, DOW, hm, isoDow, md, minutes } from '../../lib/time';
 import { confirm, openDialog } from '../../ui/dialog';
 import { Icon } from '../../ui/icons';
@@ -30,6 +30,7 @@ export function LessonsAdmin() {
   const { run } = useBusy();
   const [showPast, setShowPast] = useState(false);
   const [tab, setTab] = useState('');
+  const now = useTick(60000);
   const fileRef = useRef<HTMLInputElement>(null);
   if (!st) return error ? <ErrorState onRetry={reload} /> : <Loading />;
 
@@ -104,6 +105,10 @@ export function LessonsAdmin() {
     );
 
   const editInfo = () => openDialog('編輯頁面資訊', (close) => <InfoForm info={st.info} close={close} submit={submit} />);
+
+  // the lessons still to come, as they are and against the ratio set
+  const mix = planRatio(st.lessons, st.types, st.info.ratio ?? [1, 1, 1], now, st.clock.tz);
+  const editRatio = () => openDialog('調整類型比例', (close) => <RatioForm st={st} now={clock.now()} close={close} submit={submit} />, { wide: 'wide' });
 
   const exportJson = () =>
     download('td-schedule.json', `${JSON.stringify(scheduleJson(st.info, st.types, st.lessons, st.units), null, 1)}\n`, 'application/json;charset=utf-8');
@@ -180,6 +185,33 @@ export function LessonsAdmin() {
           <dt>公告</dt>
           <dd class="pre">{st.info.note || <span class="muted">未填</span>}</dd>
         </dl>
+      </section>
+
+      <section class="section" aria-labelledby="l-ratio">
+        <div class="section-head">
+          <h2 id="l-ratio">類型比例</h2>
+          <span class="grow" />
+          <Btn size="sm" icon="chart" onClick={editRatio}>
+            調整比例
+          </Btn>
+        </div>
+        <p class="muted small" style={{ maxWidth: '600px' }}>
+          還沒上的課會照比例分配三種類型。已經開始的課和勾了「已確定」的課不會變動
+        </p>
+        <MixBar types={st.types} counts={mix.before} />
+        <div class="row wrap" style={{ gap: '6px' }}>
+          {st.types.map((t, k) => (
+            <span class={`chip kind ${kindClass(st.types, t)}`} key={t}>
+              {t} {mix.before[k]}
+            </span>
+          ))}
+        </div>
+        <p class="small muted">
+          還沒上的 {mix.upcoming} 堂
+          {st.info.ratio ? `　目標 ${st.info.ratio.join(' : ')}` : '　還沒設定比例'}
+          {mix.confirmed > 0 && `　已確定 ${mix.confirmed} 堂`}
+          {st.info.ratio && mix.changes.length > 0 && `　和目標差 ${mix.changes.length} 堂，按「調整比例」可以重新套用`}
+        </p>
       </section>
 
       <section class="section" aria-labelledby="l-units">
@@ -265,6 +297,7 @@ export function LessonsAdmin() {
                       key={l.id}
                       l={l}
                       unit={unitOf(l, st.units)}
+                      showConfirmed
                       types={st.types}
                       teachers={teachers}
                       today={clock.today}
@@ -325,6 +358,7 @@ function LessonForm({
   const [unit, setUnit] = useState<number | null>(l?.unit ?? null);
   const [title, setTitle] = useState(l?.title ?? '');
   const [topic, setTopic] = useState(l?.topic ?? '');
+  const [confirmed, setConfirmed] = useState(l?.confirmed ?? false);
   const [err, setErr] = useState<string | null>(null);
   const typeUnits = units.filter((u) => u.type === type);
   const badTime = end <= start;
@@ -344,7 +378,7 @@ function LessonForm({
       onSubmit={async (e) => {
         e.preventDefault();
         if (!ready) return;
-        const msg = await submit('oh_admin_lesson_save', { p: { id: l?.id ?? null, date, start, end, teacher, type, unit, title, topic } }, l ? '已儲存' : '已新增');
+        const msg = await submit('oh_admin_lesson_save', { p: { id: l?.id ?? null, date, start, end, teacher, type, unit, confirmed, title, topic } }, l ? '已儲存' : '已新增');
         if (msg) setErr(msg);
         else close();
       }}
@@ -450,6 +484,10 @@ function LessonForm({
       <Field label="內容說明" optional count={topic.length} max={1000}>
         <textarea class="textarea" maxLength={1000} value={topic} onInput={(e) => setTopic((e.target as HTMLTextAreaElement).value)} />
       </Field>
+      <label class="check">
+        <input type="checkbox" checked={confirmed} onChange={() => setConfirmed(!confirmed)} />
+        已確定，調整類型比例時不會改這堂
+      </label>
       {err && (
         <p class="small" role="alert" style={{ color: 'var(--danger)' }}>
           {err}
@@ -602,6 +640,140 @@ function UnitForm({
         </button>
         <button type="submit" class="btn primary">
           儲存
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/** How the lessons split between the types, as one bar; the numbers are always written next to it. */
+function MixBar({ types, counts }: { types: string[]; counts: number[] }) {
+  return (
+    <div class="ls-mix" aria-hidden="true">
+      {counts.map((n, k) => n > 0 && <span key={k} class={kindClass(types, types[k])} style={{ flexGrow: String(n) }} />)}
+    </div>
+  );
+}
+
+function RatioForm({ st, now, close, submit }: { st: LessonsState; now: number; close: () => void; submit: Submit }) {
+  const types = st.types;
+  const tz = st.clock.tz;
+  // the ratio set before, else the mix the lessons have now (so nothing moves until it is changed)
+  const [vals, setVals] = useState(() => (st.info.ratio ?? ratioOf(planRatio(st.lessons, types, [1, 1, 1], now, tz).before)).map(String));
+  const [err, setErr] = useState<string | null>(null);
+  const nums = vals.map((v) => (/^\d+$/.test(v.trim()) ? Number(v) : NaN));
+  const valid = nums.every((n) => n >= 0 && n <= 20) && nums.some((n) => n > 0);
+  const sum = nums.reduce((a, b) => a + b, 0);
+  const plan = valid ? planRatio(st.lessons, types, nums, now, tz) : null;
+  const lost = plan ? plan.changes.filter((c) => c.lesson.unit != null).length : 0;
+  const teachers = teacherList(st.lessons);
+
+  return (
+    <form
+      class="stack"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        if (!plan) return;
+        const n = plan.changes.length;
+        const msg = await submit(
+          'oh_admin_lessons_retype',
+          { p: { ratio: nums, changes: plan.changes.map((c) => ({ id: c.lesson.id, type: c.to })) } },
+          n ? `已調整 ${n} 堂的類型` : '已儲存比例',
+        );
+        if (msg) setErr(msg);
+        else close();
+      }}
+    >
+      <div class="stack tight">
+        <h2>調整類型比例</h2>
+        <p class="muted small">
+          設定還沒上的課要怎麼分配三種類型。已經開始或上完的課、勾了「已確定」的課不會變動，其他的課用最少的改動調整，並平均分散在各週
+        </p>
+      </div>
+      <div class="ls-ratio">
+        {types.map((t, k) => (
+          <Field
+            key={t}
+            label={
+              <span class={kindClass(types, t)}>
+                <span class="sw" aria-hidden="true" />
+                {t}
+              </span>
+            }
+            help={valid ? `${Math.round((nums[k] / sum) * 100)}%` : undefined}
+          >
+            <input
+              class="input"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={20}
+              step={1}
+              value={vals[k]}
+              onInput={(e) => {
+                setVals(vals.map((v, i) => (i === k ? (e.target as HTMLInputElement).value : v)));
+                setErr(null);
+              }}
+            />
+          </Field>
+        ))}
+      </div>
+      {!valid && (
+        <p class="small" role="alert" style={{ color: 'var(--danger)' }}>
+          比例要是 0–20 的整數，至少一種類型大於 0
+        </p>
+      )}
+      {plan && (
+        <div class="card sunk tight stack tight">
+          <span class="eyebrow">還沒上的 {plan.upcoming} 堂會變成</span>
+          <MixBar types={types} counts={plan.after} />
+          <div class="stack tight">
+            {types.map((t, k) => (
+              <div class="row between" key={t}>
+                <span class={`chip kind ${kindClass(types, t)}`}>{t}</span>
+                <span class="mono small">
+                  {plan.before[k]} → <b>{plan.after[k]}</b>
+                </span>
+              </div>
+            ))}
+          </div>
+          <p class="small" aria-live="polite">
+            {plan.changes.length ? `會改 ${plan.changes.length} 堂的類型${lost ? `，其中 ${lost} 堂會離開原本的單元` : ''}` : '不需要改任何一堂'}
+          </p>
+          {(plan.past > 0 || plan.confirmed > 0) && (
+            <p class="tiny muted">
+              {[plan.past && `已經開始或上完的 ${plan.past} 堂`, plan.confirmed && `已確定的 ${plan.confirmed} 堂`].filter(Boolean).join('、')}不會變動
+            </p>
+          )}
+        </div>
+      )}
+      {plan && plan.changes.length > 0 && (
+        <details class="ls-changes">
+          <summary class="small">看會改哪幾堂</summary>
+          <ul class="ls-sib">
+            {plan.changes.map(({ lesson: l, to }) => (
+              <li key={l.id}>
+                <span class="mono">
+                  {md(l.date)} {DOW[isoDow(l.date)]} {l.start}
+                </span>
+                <span class={`ls-who ${teacherClass(teachers, l.teacher)}`}>{l.teacher}</span>
+                <span class={`chip kind ${kindClass(types, l.type)}`}>{l.type}</span>→<span class={`chip kind ${kindClass(types, to)}`}>{to}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+      {err && (
+        <p class="small" role="alert" style={{ color: 'var(--danger)' }}>
+          {err}
+        </p>
+      )}
+      <div class="actions">
+        <button type="button" class="btn" onClick={close}>
+          取消
+        </button>
+        <button type="submit" class="btn primary" disabled={!plan}>
+          {plan?.changes.length ? '套用' : '儲存比例'}
         </button>
       </div>
     </form>

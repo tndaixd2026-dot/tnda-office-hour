@@ -6,7 +6,7 @@ TN0006「跨域數位製作實務」的 Office Hour 預約平台，名稱是「�
 
 老師端是同一個畫面：三位老師（Joseph、Prolong、Tim）和共用帳號「叁式」（`app.teachers.team = true`，給業師公司或老師助理）登入後都看到三位老師的全部場次。共用帳號不會被排進任何場次、不能有開放時段（`app.not_team()` trigger），行事曆包含所有老師的場次。
 
-另外有一份 **TD 專班課表**（週三 VSAI 課程的助教課，和週四的跨域課不是同一批學生），公開頁在 `#/td`，不用登入；助教在後台「TD 課表」編輯、匯入或匯出（格式同原本獨立網站的 `schedule.json`）。資料在 `app.lessons`、`app.lesson_info`、`app.lesson_units`，API 是 `oh_lessons`（公開）、`oh_admin_lesson_*`、`oh_admin_lesson_unit_*`、`oh_admin_lessons_*` 和公開行事曆 `oh_lessons_calendar`。同一時間只能有一堂課（`LESSON_CLASH`）。每種類型可以分成單元（基礎教學（一）、（二）…）：一堂課最多屬於一個同類型的單元（複合外鍵 `(unit_id, kind)`），單元的 `sort` 永遠是 1、2、3…（`app.lesson_units_renumber()`），公開頁、匯出的 JSON 和行事曆都用這個編號；單元的說明是給學生看的。每種類型一開始先列好（一）到（十）（主題可以空著，公開頁只顯示有主題或有排課的單元）。顏色：類型用 `kindClass()`（`k0`–`k2`，方塊、色條、底色），講師用 `teacherClass()`（`tc0`–`tc3`，圓點），兩組色票分開。課表是公開的：薪資、時數、助教不能上課的日期、週三進階課不要放進去。學生名單（含個資）在 Notion，不要匯入這個平台。
+另外有一份 **TD 專班課表**（週三 VSAI 課程的助教課，和週四的跨域課不是同一批學生），公開頁在 `#/td`，不用登入；助教在後台「TD 課表」編輯、匯入或匯出（格式同原本獨立網站的 `schedule.json`）。資料在 `app.lessons`、`app.lesson_info`、`app.lesson_units`，API 是 `oh_lessons`（公開）、`oh_admin_lesson_*`、`oh_admin_lesson_unit_*`、`oh_admin_lessons_*` 和公開行事曆 `oh_lessons_calendar`。同一時間只能有一堂課（`LESSON_CLASH`）。每種類型可以分成單元（基礎教學（一）、（二）…）：一堂課最多屬於一個同類型的單元（複合外鍵 `(unit_id, kind)`），單元的 `sort` 永遠是 1、2、3…（`app.lesson_units_renumber()`），公開頁、匯出的 JSON 和行事曆都用這個編號；單元的說明是給學生看的。每種類型一開始先列好（一）到（十）（主題可以空著，公開頁只顯示有主題或有排課的單元）。類型比例：`app.lesson_info.ratio`（三個 0–20 的整數，順序同 `app.lesson_kinds()`），前端的 `planRatio()` 算出要改哪幾堂（改動最少、平均分散、沒分單元的優先），`oh_admin_lessons_retype` 再逐堂檢查並一次改完；已經開始的課和 `app.lessons.confirmed`（後台的「已確定」）不能被改（`LESSON_FIXED`）。顏色：類型用 `kindClass()`（`k0`–`k2`，方塊、色條、底色），講師用 `teacherClass()`（`tc0`–`tc3`，圓點），兩組色票分開。課表是公開的：薪資、時數、助教不能上課的日期、週三進階課不要放進去。學生名單（含個資）在 Notion，不要匯入這個平台。
 
 - Repo：`tndaixd2026-dot/tnda-office-hour`（public）
 - 網站：https://tndaixd2026-dot.github.io/tnda-office-hour/（示範模式：`#/demo`）
@@ -42,7 +42,7 @@ TN0006「跨域數位製作實務」的 Office Hour 預約平台，名稱是「�
 
 | 位置 | 內容 |
 |---|---|
-| `supabase/migrations/` | 資料表、API 函式、Discord、登入期限、私有即時頻道、行事曆、名字登入與學生名單、TD 課表與單元、老師共用畫面、每週截止、每週寄信 |
+| `supabase/migrations/` | 資料表、API 函式、Discord、登入期限、私有即時頻道、行事曆、名字登入與學生名單、TD 課表、單元與類型比例、老師共用畫面、每週截止、每週寄信 |
 | `supabase/seed.sql` | 課程初始資料 |
 | `src/db/sql.ts` | 示範模式的 bootstrap 和 `MIGRATIONS` 清單 |
 | `src/api/` | `cloud.ts`（Supabase）和 `demo.ts`（PGlite）實作同一個 `Engine` 介面 |

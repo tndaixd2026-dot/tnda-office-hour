@@ -316,6 +316,8 @@ export interface Lesson {
   type: string;
   /** LessonUnit id, of a unit of the same type */
   unit: number | null;
+  /** 已確定: adjusting the type ratio leaves this lesson alone */
+  confirmed: boolean;
   title: string;
   topic: string;
 }
@@ -335,6 +337,8 @@ export interface LessonInfo {
   subtitle: string;
   place: string;
   note: string;
+  /** the mix of types, in the order of LessonsState.types; null until set */
+  ratio: number[] | null;
 }
 
 export interface LessonsState {

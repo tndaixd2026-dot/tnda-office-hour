@@ -133,13 +133,105 @@ export function scheduleJson(info: LessonInfo, types: string[], lessons: Lesson[
     subtitle: info.subtitle,
     place: info.place,
     note: info.note,
+    ratio: info.ratio,
     types,
     units: units.map(({ type, no, title, topic }) => ({ type, no, title, topic })),
     sessions: lessons.map((l) => {
-      const { date, start, end, teacher, type, title, topic } = l;
-      return { date, start, end, teacher, type, unit: unitOf(l, units)?.no ?? null, title, topic };
+      const { date, start, end, teacher, type, confirmed, title, topic } = l;
+      return { date, start, end, teacher, type, unit: unitOf(l, units)?.no ?? null, confirmed, title, topic };
     }),
   };
+}
+
+/** Whole numbers in proportion to `weights` that add up to `n` (largest remainder; a tie goes to the earlier). */
+export function apportion(n: number, weights: number[]): number[] {
+  const total = weights.reduce((a, b) => a + b, 0);
+  if (n <= 0 || total <= 0) return weights.map(() => 0);
+  const out = weights.map((w) => Math.floor((n * w) / total));
+  const order = weights.map((w, i) => ({ i, rest: n * w - out[i] * total })).sort((a, b) => b.rest - a.rest || a.i - b.i);
+  for (let left = n - out.reduce((a, b) => a + b, 0), j = 0; left > 0; left--, j++) out[order[j].i]++;
+  return out;
+}
+
+/** `count` of `list`, spread evenly over it. */
+function spread<T>(list: T[], count: number): T[] {
+  return Array.from({ length: Math.max(0, count) }, (_, i) => list[Math.floor(((i + 0.5) * list.length) / count)]);
+}
+
+/** A ratio close to these counts, in whole numbers 0–20: 33, 27, 24 → 11 : 9 : 8. */
+export function ratioOf(counts: number[]): number[] {
+  const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
+  const g = counts.reduce(gcd, 0) || 1;
+  let r = counts.map((c) => c / g);
+  const top = Math.max(...r);
+  if (top > 20) r = r.map((c) => (c ? Math.max(1, Math.round((c * 20) / top)) : 0));
+  return r.some((c) => c > 0) ? r : counts.map(() => 1);
+}
+
+export interface RatioPlan {
+  /** started or over: they keep their type */
+  past: number;
+  /** still to come */
+  upcoming: number;
+  /** still to come but confirmed (已確定): they keep their type */
+  confirmed: number;
+  /** per type, in the order of `types`, over the lessons still to come */
+  before: number[];
+  after: number[];
+  /** in time order */
+  changes: Array<{ lesson: Lesson; to: string }>;
+}
+
+/**
+ * Re-types the lessons still to come so that their types follow `ratio`
+ * (in the order of `types`). Lessons that have started and confirmed ones
+ * keep their type but count towards the mix. As few lessons as possible
+ * change: a type with too many gives up some, picked evenly over the
+ * weeks and those not yet in a unit first, and the types that are short
+ * take them in turn.
+ */
+export function planRatio(lessons: Lesson[], types: string[], ratio: number[], now: number, tz: string): RatioPlan {
+  const upcoming = lessons.filter((l) => lessonStart(l, tz) > now);
+  const free = upcoming.filter((l) => !l.confirmed);
+  const count = (list: Lesson[]) => types.map((t) => list.filter((l) => l.type === t).length);
+  const before = count(upcoming);
+  const fixed = count(upcoming.filter((l) => l.confirmed));
+  const target = apportion(upcoming.length, ratio);
+  // what the free lessons should become, after the confirmed ones are counted
+  const want = apportion(free.length, target.map((t, k) => Math.max(0, t - fixed[k])));
+  const have = count(free);
+
+  const moving: Lesson[] = [];
+  types.forEach((t, k) => {
+    const extra = have[k] - want[k];
+    if (extra <= 0) return;
+    const mine = free.filter((l) => l.type === t);
+    const loose = mine.filter((l) => l.unit == null);
+    const first = Math.min(extra, loose.length);
+    moving.push(...spread(loose, first), ...spread(mine.filter((l) => l.unit != null), extra - first));
+  });
+  moving.sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start) || a.id - b.id);
+
+  const short = types.map((_, k) => Math.max(0, want[k] - have[k]));
+  const total = short.reduce((a, b) => a + b, 0);
+  const given = types.map(() => 0);
+  const changes = moving.map((lesson, j) => {
+    // the type furthest behind its share so far
+    let best = -1;
+    let lag = -Infinity;
+    short.forEach((n, k) => {
+      const behind = (n * (j + 1)) / total - given[k];
+      if (given[k] < n && behind > lag + 1e-9) {
+        best = k;
+        lag = behind;
+      }
+    });
+    given[best]++;
+    return { lesson, to: types[best] };
+  });
+
+  const after = before.map((n, k) => n - moving.filter((l) => l.type === types[k]).length + given[k]);
+  return { past: lessons.length - upcoming.length, upcoming: upcoming.length, confirmed: upcoming.length - free.length, before, after, changes };
 }
 
 /** Whole hours that cover every lesson, for the week grid: [first, last). */

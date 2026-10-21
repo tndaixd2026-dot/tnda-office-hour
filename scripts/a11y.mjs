@@ -56,6 +56,12 @@ for (const scheme of ['light', 'dark']) {
   await page.waitForTimeout(400);
   await scan(page, 'admin TD unit form');
   await page.getByRole('dialog').getByRole('button', { name: '取消' }).click();
+  await page.getByRole('button', { name: '調整比例' }).click();
+  await page.getByRole('dialog').getByLabel('案例分享').fill('20');
+  await page.getByRole('dialog').getByText('看會改哪幾堂').click();
+  await page.waitForTimeout(400);
+  await scan(page, 'admin TD type ratio');
+  await page.getByRole('dialog').getByRole('button', { name: '取消' }).click();
   await page.getByRole('link', { name: '打開公開頁' }).click();
   await page.getByRole('heading', { name: '全部課程' }).waitFor();
   await page.waitForTimeout(700);
