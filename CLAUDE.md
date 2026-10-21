@@ -75,6 +75,7 @@ TN0006「跨域數位製作實務」的 Office Hour 預約平台，名稱是「�
 - 所有時間都以 `settings.timezone`（Asia/Taipei）計算。前端測試用 `FAKE_TIME` 模擬時間；資料庫的 `app.now()` 只要不是透過 `authenticator` 連線，就能用 `app.now` 設定值模擬。
 - 對話框的自動聚焦要放在 `useLayoutEffect`，否則使用者打字很快時，焦點會被搶走。
 - 新增 `oh_*` 函式時要驗證 token，錯誤用 `app.err()` 回傳錯誤代碼，並在 `tests/` 補上測試。
+- Supabase 對 API 請求載入了 pg-safeupdate：函式裡的 `delete`、`update` **一定要有 WHERE**，要全部就寫 `where true`，否則正式網站會出現「21000 DELETE requires a WHERE clause」（PGlite 和本機測試不會報錯，`tests/safeupdate.test.ts` 會檢查）。
 - 連正式資料庫：`PGPASSWORD="$(cat .secrets/db-password.txt)" /opt/homebrew/opt/libpq/bin/psql "postgresql://postgres.$(cat .secrets/project-ref.txt)@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres"`
 
 ## 定期維護
