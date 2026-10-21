@@ -9,6 +9,7 @@ import {
   byWeek,
   googleCalendarUrl,
   hourRange,
+  kindClass,
   lessonDetails,
   lessonEnd,
   lessonKind,
@@ -23,6 +24,7 @@ import {
   teacherList,
   unitNo,
   unitOf,
+  unitShown,
 } from '../../lib/lessons';
 import { addDays, dayLabel, daysBetween, DOW, DOW_SHORT, isoDow, md, minutes, relativeDay, tzNote, untilText } from '../../lib/time';
 import { openDialog } from '../../ui/dialog';
@@ -100,7 +102,8 @@ function LessonsHome({ st, initialWho }: { st: LessonsState; initialWho?: string
   const [who, setWho] = useState(initialWho && teachers.includes(initialWho) ? initialWho : '');
   const [kind, setKind] = useState('');
   const [unit, setUnit] = useState<number | null>(null);
-  const kindUnits = kind ? st.units.filter((u) => u.type === kind) : [];
+  // only units that have lessons are worth filtering by
+  const kindUnits = kind ? st.units.filter((u) => u.type === kind && st.lessons.some((l) => l.unit === u.id)) : [];
   const shown = st.lessons.filter((l) => (!who || l.teacher === who) && (!kind || l.type === kind) && (unit == null || l.unit === unit));
   const next = nextLesson(shown, now, tz);
   const first = st.lessons[0];
@@ -200,7 +203,7 @@ function LessonsHome({ st, initialWho }: { st: LessonsState; initialWho?: string
                   全部
                 </button>
                 {st.types.map((t) => (
-                  <button type="button" key={t} class="ls-tg plain" aria-pressed={kind === t} onClick={() => pickKind(t)}>
+                  <button type="button" key={t} class={`ls-tg kind ${kindClass(st.types, t)}`} aria-pressed={kind === t} onClick={() => pickKind(t)}>
                     {t}
                   </button>
                 ))}
@@ -333,13 +336,14 @@ interface ViewProps {
 
 function Rows({
   list,
+  types,
   units,
   inUnit,
   teachers,
   now,
   tz,
   open,
-}: { list: Lesson[]; inUnit?: boolean } & Pick<ViewProps, 'units' | 'teachers' | 'now' | 'tz' | 'open'>) {
+}: { list: Lesson[]; inUnit?: boolean } & Pick<ViewProps, 'types' | 'units' | 'teachers' | 'now' | 'tz' | 'open'>) {
   return (
     <div class="list">
       {list.map((l) => (
@@ -348,6 +352,7 @@ function Rows({
           l={l}
           unit={unitOf(l, units)}
           inUnit={inUnit}
+          types={types}
           teachers={teachers}
           today={clock.today}
           phase={phaseOf(l, now, tz)}
@@ -398,7 +403,7 @@ function startWeek(all: Lesson[]): string {
   return monday(today < first ? first : today > last ? last : today);
 }
 
-function WeekView({ lessons, all, units, teachers, now, tz, open }: ViewProps) {
+function WeekView({ lessons, all, types, units, teachers, now, tz, open }: ViewProps) {
   const phone = useMedia('(max-width: 640px)');
   const [start, setStart] = useState(() => startWeek(all));
   const firstWeek = monday(all[0]?.date ?? clock.today);
@@ -440,7 +445,7 @@ function WeekView({ lessons, all, units, teachers, now, tz, open }: ViewProps) {
                     {relativeDay(d, clock.today) ? `${relativeDay(d, clock.today)}・` : ''}
                     {dayLabel(d)}
                   </h4>
-                  <Rows list={inWeek.filter((l) => l.date === d)} units={units} teachers={teachers} now={now} tz={tz} open={open} />
+                  <Rows list={inWeek.filter((l) => l.date === d)} types={types} units={units} teachers={teachers} now={now} tz={tz} open={open} />
                 </div>
               ))}
           </div>
@@ -474,7 +479,7 @@ function WeekView({ lessons, all, units, teachers, now, tz, open }: ViewProps) {
                       <button
                         type="button"
                         key={l.id}
-                        class={`ls-ev ${teacherClass(teachers, l.teacher)} ${phase}`}
+                        class={`ls-ev ${kindClass(types, l.type)} ${phase}`}
                         style={{ top: `calc(${top} * var(--hh))`, height: `calc(${height} * var(--hh) - 3px)` }}
                         onClick={() => open(l)}
                       >
@@ -483,7 +488,7 @@ function WeekView({ lessons, all, units, teachers, now, tz, open }: ViewProps) {
                           {l.start}–{l.end}
                         </span>
                         <span class="n">
-                          {l.teacher} · {lessonKind(l, unit)}
+                          <span class={`ls-who ${teacherClass(teachers, l.teacher)}`}>{l.teacher}</span> · {lessonKind(l, unit)}
                         </span>
                         {title && <span class="ttl">{title}</span>}
                       </button>
@@ -498,7 +503,7 @@ function WeekView({ lessons, all, units, teachers, now, tz, open }: ViewProps) {
   );
 }
 
-function MonthView({ lessons, all, units, teachers, now, tz, open }: ViewProps) {
+function MonthView({ lessons, all, types, units, teachers, now, tz, open }: ViewProps) {
   const today = clock.today;
   const first = all[0]?.date ?? today;
   const last = all[all.length - 1]?.date ?? today;
@@ -542,8 +547,8 @@ function MonthView({ lessons, all, units, teachers, now, tz, open }: ViewProps) 
                 {list.length ? ` ${list.length} 堂` : ''}
               </span>
               {list.map((l) => (
-                <span class={`ls-m ${teacherClass(teachers, l.teacher)}`} key={l.id}>
-                  <span class="t">{l.start}</span> <span class="nm">{l.teacher}</span>
+                <span class={`ls-m ${kindClass(types, l.type)}`} key={l.id}>
+                  <span class="t">{l.start}</span> <span class={`nm ls-who ${teacherClass(teachers, l.teacher)}`}>{l.teacher}</span>
                   <span class="sr-only"> {lessonKind(l, unitOf(l, units))}</span>
                 </span>
               ))}
@@ -565,14 +570,14 @@ function MonthView({ lessons, all, units, teachers, now, tz, open }: ViewProps) 
         <h3 class="title-s">
           {md(sel)}（{DOW[isoDow(sel)]}）
         </h3>
-        {picked.length ? <Rows list={picked} units={units} teachers={teachers} now={now} tz={tz} open={open} /> : <p class="muted small">這天沒有課</p>}
+        {picked.length ? <Rows list={picked} types={types} units={units} teachers={teachers} now={now} tz={tz} open={open} /> : <p class="muted small">這天沒有課</p>}
       </div>
     </div>
   );
 }
 
 /** One column per teacher: how many lessons of each type, and what is coming up. */
-function TeacherView({ lessons, units, teachers, now, tz, open }: ViewProps) {
+function TeacherView({ lessons, types, units, teachers, now, tz, open }: ViewProps) {
   const [showPast, setShowPast] = useState(false);
   const who = teachers.filter((t) => lessons.some((l) => l.teacher === t));
   return (
@@ -585,7 +590,7 @@ function TeacherView({ lessons, units, teachers, now, tz, open }: ViewProps) {
           const mine = lessons.filter((l) => l.teacher === t);
           const ahead = mine.filter((l) => lessonEnd(l, tz) > now);
           const list = showPast ? mine : ahead;
-          const counts = [...new Set(mine.map((l) => l.type))].map((k) => `${k} ${mine.filter((l) => l.type === k).length}`);
+          const counts = types.filter((k) => mine.some((l) => l.type === k));
           return (
             <section class="stack tight" key={t} aria-labelledby={`ls-t-${t}`}>
               <h3 class={`ls-wh ${teacherClass(teachers, t)}`} id={`ls-t-${t}`}>
@@ -594,8 +599,14 @@ function TeacherView({ lessons, units, teachers, now, tz, open }: ViewProps) {
                   共 {mine.length} 堂 還有 {ahead.length} 堂
                 </span>
               </h3>
-              <p class="tiny muted">{counts.join('　')}</p>
-              {list.length ? <Rows list={list} units={units} teachers={teachers} now={now} tz={tz} open={open} /> : <p class="muted small">沒有還沒上的課</p>}
+              <div class="row wrap" style={{ gap: '6px' }}>
+                {counts.map((k) => (
+                  <span class={`chip kind ${kindClass(types, k)}`} key={k}>
+                    {k} {mine.filter((l) => l.type === k).length}
+                  </span>
+                ))}
+              </div>
+              {list.length ? <Rows list={list} types={types} units={units} teachers={teachers} now={now} tz={tz} open={open} /> : <p class="muted small">沒有還沒上的課</p>}
             </section>
           );
         })}
@@ -608,17 +619,20 @@ function TeacherView({ lessons, units, teachers, now, tz, open }: ViewProps) {
 function UnitView({ lessons, all, types, units, teachers, now, tz, open }: ViewProps) {
   // units with no lessons yet show only when nothing is filtered out
   const everything = lessons.length === all.length;
-  const rest = { units, teachers, now, tz, open };
-  const shown = types.filter((t) => lessons.some((l) => l.type === t) || (everything && units.some((u) => u.type === t)));
+  const rest = { types, units, teachers, now, tz, open };
+  // a unit still empty in the outline is left out until it has a topic or lessons
+  const listed = units.filter((u) => unitShown(u, all));
+  const shown = types.filter((t) => lessons.some((l) => l.type === t) || (everything && listed.some((u) => u.type === t)));
   return (
     <div class="stack loose">
-      {!units.length && <p class="muted small">還沒有分單元，先依類型列出全部的課</p>}
+      {!listed.length && <p class="muted small">還沒有分單元，先依類型列出全部的課</p>}
       {shown.map((t) => {
-        const mine = units.filter((u) => u.type === t && (lessons.some((l) => l.unit === u.id) || (everything && !all.some((l) => l.unit === u.id))));
+        const mine = listed.filter((u) => u.type === t && (lessons.some((l) => l.unit === u.id) || (everything && !all.some((l) => l.unit === u.id))));
         const loose = lessons.filter((l) => l.type === t && unitOf(l, units) == null);
         return (
-          <section class="stack" key={t} aria-labelledby={`ls-k-${t}`}>
+          <section class={`stack ${kindClass(types, t)}`} key={t} aria-labelledby={`ls-k-${t}`}>
             <h3 class="title-s" id={`ls-k-${t}`}>
+              <span class="sw" aria-hidden="true" />
               {t}
               {mine.length > 0 && <span class="small muted"> {mine.length} 個單元</span>}
             </h3>
@@ -630,7 +644,7 @@ function UnitView({ lessons, all, types, units, teachers, now, tz, open }: ViewP
                   <h4 class="ls-wh" id={`ls-u-${u.id}`}>
                     <span>
                       {unitNo(u)}
-                      {u.title}
+                      {u.title || '主題待定'}
                     </span>
                     <span class="small muted">{list.length ? `${list.length} 堂${ahead < list.length ? ` 還有 ${ahead} 堂` : ''}` : '日期待定'}</span>
                   </h4>
@@ -657,7 +671,7 @@ function openLesson(l: Lesson, st: LessonsState, teachers: string[]) {
   const unit = unitOf(l, st.units);
   const siblings = unit ? st.lessons.filter((x) => x.unit === unit.id) : [];
   openDialog(`${md(l.date)} ${l.start} ${l.teacher}`, (close) => (
-    <LessonDetail l={l} unit={unit} siblings={siblings} info={st.info} tz={st.clock.tz} teachers={teachers} close={close} />
+    <LessonDetail l={l} unit={unit} siblings={siblings} info={st.info} tz={st.clock.tz} types={st.types} teachers={teachers} close={close} />
   ));
 }
 
@@ -667,6 +681,7 @@ function LessonDetail({
   siblings,
   info,
   tz,
+  types,
   teachers,
   close,
 }: {
@@ -675,6 +690,7 @@ function LessonDetail({
   siblings: Lesson[];
   info: LessonInfo;
   tz: string;
+  types: string[];
   teachers: string[];
   close: () => void;
 }) {
@@ -689,7 +705,7 @@ function LessonDetail({
       </div>
       <div class={`row wrap ${teacherClass(teachers, l.teacher)}`}>
         <span class="ls-who">{l.teacher}</span>
-        <span class="chip">{lessonKind(l, unit)}</span>
+        <span class={`chip kind ${kindClass(types, l.type)}`}>{lessonKind(l, unit)}</span>
       </div>
       {unit?.topic && (
         <div class="card sunk tight stack tight">
@@ -707,7 +723,7 @@ function LessonDetail({
                 <span class="mono">
                   {md(x.date)} {DOW[isoDow(x.date)]} {x.start}
                 </span>{' '}
-                {x.teacher}
+                <span class={`ls-who ${teacherClass(teachers, x.teacher)}`}>{x.teacher}</span>
                 {x.id === l.id && <span class="chip accent">這堂</span>}
               </li>
             ))}

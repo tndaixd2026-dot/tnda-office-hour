@@ -30,6 +30,14 @@
   --info: #2f5bd3;
   --info-soft: #e7edfb;
   --focus: #2f5bd3;
+  /* TD lesson types, apart from the teachers' blue, orange, teal */
+  --k0: #17703a;
+  --k0-soft: #e2f2e7;
+  --k1: #6b3fc2;
+  --k1-soft: #eee8fa;
+  --k2: #ad2366;
+  --k2-soft: #fae6ef;
+  --teal: #0e6f82;
 
   --btn: var(--ink);
   --btn-ink: #ffffff;
@@ -79,6 +87,13 @@
     --info: #86a8ff;
     --info-soft: #18213a;
     --focus: #86a8ff;
+    --k0: #6fd397;
+    --k0-soft: #14291c;
+    --k1: #b9a0ff;
+    --k1-soft: #251c3b;
+    --k2: #ff8fc4;
+    --k2-soft: #38182a;
+    --teal: #5fcbe0;
     --btn: #f3f1ec;
     --btn-ink: #161514;
     --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
@@ -111,6 +126,13 @@
   --info: #86a8ff;
   --info-soft: #18213a;
   --focus: #86a8ff;
+  --k0: #6fd397;
+  --k0-soft: #14291c;
+  --k1: #b9a0ff;
+  --k1-soft: #251c3b;
+  --k2: #ff8fc4;
+  --k2-soft: #38182a;
+  --teal: #5fcbe0;
   --btn: #f3f1ec;
   --btn-ink: #161514;
   --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
@@ -2397,7 +2419,7 @@ table.t tr.mine td {
 }
 
 /* ---------- TD 專班課表 ---------- */
-/* one colour per teacher; the name is always written next to it */
+/* one colour per teacher, shown as a round dot; the name is always written next to it */
 .tc0 {
   --tc: var(--info);
 }
@@ -2405,10 +2427,46 @@ table.t tr.mine td {
   --tc: var(--accent);
 }
 .tc2 {
-  --tc: var(--ok);
+  --tc: var(--teal);
 }
 .tc3 {
   --tc: var(--warn);
+}
+/* one colour per lesson type, shown as a square, a bar or a tinted chip; the type is always written too */
+.k0 {
+  --kc: var(--k0);
+  --kc-soft: var(--k0-soft);
+}
+.k1 {
+  --kc: var(--k1);
+  --kc-soft: var(--k1-soft);
+}
+.k2 {
+  --kc: var(--k2);
+  --kc-soft: var(--k2-soft);
+}
+.chip.kind {
+  background: var(--kc-soft);
+  color: var(--kc);
+  font-weight: 600;
+}
+.sw {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  margin-right: 7px;
+  border-radius: 3px;
+  background: var(--kc);
+  vertical-align: 0;
+}
+/* a lesson or unit row: a bar in its type's colour */
+.li.ls-row,
+.li.ls-unit-row {
+  box-shadow: inset 4px 0 0 var(--kc, transparent);
+}
+.li.ls-row.past {
+  box-shadow: inset 4px 0 0 color-mix(in srgb, var(--kc, transparent) 35%, transparent);
 }
 .ls-who {
   display: inline-flex;
@@ -2440,8 +2498,8 @@ table.t tr.mine td {
 .ls-topic {
   display: block;
 }
-.li.ls-live {
-  box-shadow: inset 3px 0 0 var(--accent);
+.li.ls-row.ls-live {
+  box-shadow: inset 4px 0 0 var(--kc, transparent), inset 0 0 0 2px var(--accent);
 }
 .ls-wh {
   display: flex;
@@ -2478,8 +2536,12 @@ table.t tr.mine td {
   content: '';
   width: 10px;
   height: 10px;
-  border-radius: 3px;
+  border-radius: 50%;
   background: var(--tc);
+}
+.ls-tg.kind::before {
+  border-radius: 3px;
+  background: var(--kc);
 }
 .ls-tg.plain {
   padding: 0 14px;
@@ -2525,6 +2587,19 @@ table.t tr.mine td {
   flex: 0 0 auto;
   min-width: 3em;
   font-weight: 800;
+  color: var(--kc, var(--ink));
+}
+.ls-unit {
+  border-left: 4px solid var(--kc);
+}
+.ls-dates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+}
+.ls-dates .ls-who,
+.ls-picks .ls-who {
+  font-weight: 600;
 }
 .ls-picks {
   display: grid;
@@ -2620,16 +2695,26 @@ table.t tr.mine td {
   overflow: hidden;
   padding: 3px 6px;
   border: 0;
-  border-left: 3px solid var(--tc);
+  border-left: 3px solid var(--kc);
   border-radius: 4px;
-  background: var(--surface-2);
+  background: var(--kc-soft);
   color: var(--ink);
   text-align: left;
   font-size: 12px;
   line-height: 1.3;
 }
 .ls-ev:hover {
-  background: var(--surface-3);
+  box-shadow: inset 0 0 0 1px var(--kc);
+}
+.ls-ev .ls-who,
+.ls-m .ls-who {
+  gap: 4px;
+  font-weight: 600;
+}
+.ls-ev .ls-who::before,
+.ls-m .ls-who::before {
+  width: 7px;
+  height: 7px;
 }
 .ls-ev:focus-visible {
   outline-offset: -2px;
@@ -2734,9 +2819,9 @@ button.ls-day:hover {
 .ls-m {
   display: block;
   padding: 1px 6px;
-  border-left: 3px solid var(--tc);
+  border-left: 3px solid var(--kc);
   border-radius: 3px;
-  background: var(--surface-2);
+  background: var(--kc-soft);
   font-size: 12px;
   line-height: 1.4;
   white-space: nowrap;
@@ -2770,7 +2855,7 @@ button.ls-day:hover {
     padding: 0;
     border-left: 0;
     border-radius: 99px;
-    background: var(--tc);
+    background: var(--kc);
   }
   .ls-m .t,
   .ls-m .nm {

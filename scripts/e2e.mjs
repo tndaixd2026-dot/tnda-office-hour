@@ -272,7 +272,9 @@ try {
     const d = page.getByRole('dialog', { name: '新增一堂課' });
     await d.getByLabel('日期').fill('2027-01-02');
     await d.getByLabel('開始').selectOption('17:00');
-    await d.getByLabel('講師').fill('哲瑜');
+    // teachers already teaching are one click away, each in their colour
+    await d.getByRole('group', { name: '直接選名字' }).getByRole('button', { name: '哲瑜' }).click();
+    check((await d.getByLabel('講師').inputValue()) === '哲瑜', 'picking a teacher should fill the field');
     await d.getByRole('button', { name: '儲存' }).click();
     await d.getByText('和 1/2 17:00 浡崴 的課時間重疊').waitFor();
     await d.getByLabel('開始').selectOption('18:00');
@@ -296,6 +298,11 @@ try {
   await run('admin groups TD lessons into units', async () => {
     await page.getByRole('heading', { name: '單元', exact: true }).waitFor();
     await page.getByRole('group', { name: '單元的類型' }).getByRole('button', { name: '基礎教學' }).click();
+    // each type starts with units （一） to （十）, their topics still to write
+    const units = page.locator('section[aria-labelledby="l-units"] .ls-edit');
+    check((await units.count()) === 10, 'each type should start with ten units');
+    check((await units.nth(9).textContent()).startsWith('（十）主題待定'), 'an empty unit should wait for its topic');
+    check((await units.first().getAttribute('class')).includes('k0'), 'a unit should take its type colour');
     await page.getByRole('button', { name: '新增單元' }).click();
     const d = page.getByRole('dialog', { name: '新增基礎教學單元' });
     await d.getByLabel('主題').fill('E2E 單元');
@@ -308,7 +315,6 @@ try {
     await d.getByRole('button', { name: '儲存' }).click();
     await page.getByText('已新增單元').waitFor();
     // it went first, and the units after it moved down one
-    const units = page.locator('section[aria-labelledby="l-units"] .ls-edit');
     check((await units.first().textContent()).includes('（一）E2E 單元'), 'the new unit should be first');
     check((await units.nth(1).textContent()).startsWith('（二）'), 'the next unit should be renumbered');
     // a lesson's own form picks its unit too
@@ -353,6 +359,8 @@ try {
     // units: their topic and description, a filter, and every time of a unit in a lesson
     await page.getByRole('button', { name: '依單元', exact: true }).click();
     await page.getByRole('heading', { name: '（一）E2E 單元' }).waitFor();
+    check((await page.getByText('主題待定').count()) === 0, 'units still empty in the outline should stay out of sight');
+    check((await page.locator('.ls-row.k0 .chip.kind').count()) > 0, 'lessons should be coloured by type');
     await page.getByText('E2E 單元說明：先裝好軟體').first().waitFor();
     const byKind = page.getByRole('group', { name: '只看哪種類型' });
     await byKind.getByRole('button', { name: '基礎教學' }).click();

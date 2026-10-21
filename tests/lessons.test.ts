@@ -18,6 +18,7 @@ import {
   unitOf,
 } from '../src/lib/lessons';
 import { instant } from '../src/lib/time';
+import { MIGRATIONS } from '../src/db/sql';
 import { expectCode, makeDb, type TestDb } from './helpers';
 
 describe('TD lesson helpers', () => {
@@ -307,12 +308,33 @@ describe('TD units', () => {
     for (const l of (await db.call('oh_lessons')).lessons) ids[`${l.date} ${l.start}`] = l.id;
   });
 
-  it('starts with none, and only admins add them', async () => {
+  it('starts with an outline of ten units per type, topics left empty, and only admins change them', async () => {
     const r = await db.call('oh_lessons');
-    expect(r.units).toEqual([]);
+    expect(r.units).toHaveLength(30);
+    for (const t of r.types) {
+      const mine = r.units.filter((u: any) => u.type === t);
+      expect(mine.map((u: any) => u.no)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+      expect(mine.every((u: any) => u.title === '' && u.topic === '')).toBe(true);
+    }
+    // in type order, as the pages list them
+    expect([...new Set(r.units.map((u: any) => u.type))]).toEqual(r.types);
     expect(r.lessons[0].unit).toBeNull();
     await expectCode(db.call('oh_admin_lesson_unit_save', { p_token: student, p: { type: '基礎教學', title: 'x' } }), 'FORBIDDEN');
-    await expectCode(db.call('oh_admin_lesson_unit_delete', { p_token: student, p_id: 1 }), 'FORBIDDEN');
+    await expectCode(db.call('oh_admin_lesson_unit_delete', { p_token: student, p_id: r.units[0].id }), 'FORBIDDEN');
+    // the rest of these start from no units
+    await db.sql('delete from app.lesson_units');
+  });
+
+  it('fills an outline up to ten without touching the units a type already has', async () => {
+    const fresh = await makeDb({ seed: false });
+    // what the outline migration does, run again on a type that has two
+    await fresh.sql("delete from app.lesson_units where kind = '基礎教學' and sort > 2");
+    await fresh.sql("update app.lesson_units set title = '已寫好' where kind = '基礎教學'");
+    const outline = MIGRATIONS[MIGRATIONS.length - 1].split('select app.lesson_units_renumber();')[0];
+    await fresh.pg.exec(outline.slice(outline.indexOf('-- ten per type')));
+    const units = (await fresh.call('oh_lessons')).units.filter((u: any) => u.type === '基礎教學');
+    expect(units.map((u: any) => `${u.no}${u.title}`)).toEqual(['1已寫好', '2已寫好', '3', '4', '5', '6', '7', '8', '9', '10']);
+    await fresh.pg.close();
   });
 
   it('numbers units within their type and ticks the lessons that teach them', async () => {
@@ -372,7 +394,6 @@ describe('TD units', () => {
     const [two] = await units();
     const share = ids['2026-11-06 21:00']; // 案例分享
     const bad = [
-      { type: '基礎教學', title: '  ' },
       { type: '基礎教學', title: 'x'.repeat(81) },
       { type: '基礎教學', title: 'x', topic: 'x'.repeat(1001) },
       { type: '進階課', title: 'x' },
@@ -392,6 +413,11 @@ describe('TD units', () => {
     const res = await db.call('oh_admin_lesson_unit_save', { p_token: admin, p: { type: '解惑時間', title: '期末作品' } });
     expect(res.type).toBe('駐村創作');
     await db.call('oh_admin_lesson_unit_delete', { p_token: admin, p_id: res.id });
+    // a unit may wait for its topic
+    const blank = await db.call('oh_admin_lesson_unit_save', { p_token: admin, p: { type: '駐村創作', title: '   ' } });
+    expect(blank).toMatchObject({ type: '駐村創作', no: 1, title: '', topic: '' });
+    expect((await db.call('oh_admin_lesson_unit_save', { p_token: admin, p: { id: blank.id } })).title).toBe('');
+    await db.call('oh_admin_lesson_unit_delete', { p_token: admin, p_id: blank.id });
   });
 
   it('sets a lesson unit when it is saved, and drops it when the type changes', async () => {
@@ -467,7 +493,7 @@ describe('TD units', () => {
     const before = await db.call('oh_lessons');
     await expectCode(db.call('oh_admin_lessons_import', { p_token: admin, p: { sessions: [lesson(), lesson({ date: '2027-01-07', unit: 3 })] } }), 'IMPORT_ROW', '2');
     await expectCode(db.call('oh_admin_lessons_import', { p_token: admin, p: { sessions: [lesson({ unit: 'one' })] } }), 'IMPORT_ROW', '1');
-    await expectCode(db.call('oh_admin_lessons_import', { p_token: admin, p: { units: [{ type: '基礎教學', title: '' }], sessions: [] } }), 'IMPORT_UNIT', '1');
+    await expectCode(db.call('oh_admin_lessons_import', { p_token: admin, p: { units: [{ type: '基礎教學', title: 'x'.repeat(81) }], sessions: [] } }), 'IMPORT_UNIT', '1');
     await expectCode(
       db.call('oh_admin_lessons_import', { p_token: admin, p: { units: [{ type: '基礎教學', title: 'a' }, { type: '基礎教學', no: 1, title: 'b' }], sessions: [] } }),
       'IMPORT_UNIT',
@@ -476,6 +502,9 @@ describe('TD units', () => {
     await expectCode(db.call('oh_admin_lessons_import', { p_token: admin, p: { units: [{ type: '進階', title: 'a' }], sessions: [] } }), 'IMPORT_UNIT', '1');
     await expectCode(db.call('oh_admin_lessons_import', { p_token: admin, p: { units: 'all', sessions: [] } }), 'VALIDATION', 'units');
     expect(await db.call('oh_lessons')).toEqual(before);
+    // a unit without a topic yet comes along too
+    await db.call('oh_admin_lessons_import', { p_token: admin, p: { units: [{ type: '案例分享' }], sessions: [lesson({ type: '案例分享', unit: 1 })] } });
+    expect((await units()).map((u: any) => [u.type, u.no, u.title])).toEqual([['案例分享', 1, '']]);
     // an empty list clears them
     await db.call('oh_admin_lessons_import', { p_token: admin, p: { units: [], sessions: [lesson()] } });
     expect(await units()).toEqual([]);

@@ -1,5 +1,5 @@
 import type { Lesson, LessonUnit } from '../../api/types';
-import { lessonKind, lessonTitle, teacherClass } from '../../lib/lessons';
+import { kindClass, lessonKind, lessonTitle, teacherClass } from '../../lib/lessons';
 import { DOW, isoDow, md, relativeDay } from '../../lib/time';
 import { Icon, type IconName } from '../../ui/icons';
 
@@ -9,12 +9,14 @@ export type LessonPhase = 'past' | 'live' | 'later';
  * One lesson in a list. With `onClick` the whole row is a button (edit in
  * the admin, details on the public page); everything inside is phrasing
  * content so that stays valid HTML. Inside a unit's own list (`inUnit`)
- * the unit is already said, so only the lesson's own title is shown.
+ * the unit is already said, so only the lesson's own title is shown. The
+ * row's bar and chip take its type's colour, the dot its teacher's.
  */
 export function LessonRow({
   l,
   unit,
   inUnit = false,
+  types,
   teachers,
   today,
   phase = 'later',
@@ -24,6 +26,7 @@ export function LessonRow({
   l: Lesson;
   unit?: LessonUnit;
   inUnit?: boolean;
+  types: string[];
   teachers: string[];
   today: string;
   phase?: LessonPhase;
@@ -32,7 +35,8 @@ export function LessonRow({
 }) {
   const rel = relativeDay(l.date, today);
   const title = inUnit ? l.title : lessonTitle(l, unit);
-  const cls = ['li top ls-row', teacherClass(teachers, l.teacher), phase === 'past' && 'past', phase === 'live' && 'ls-live', onClick && 'ls-edit']
+  const kind = kindClass(types, l.type);
+  const cls = ['li top ls-row', kind, teacherClass(teachers, l.teacher), phase === 'past' && 'past', phase === 'live' && 'ls-live', onClick && 'ls-edit']
     .filter(Boolean)
     .join(' ');
   const body = (
@@ -47,7 +51,7 @@ export function LessonRow({
             {l.start}–{l.end}
           </span>
           <span class="ls-who">{l.teacher}</span>
-          {!inUnit && <span class="chip">{lessonKind(l, unit)}</span>}
+          {!inUnit && <span class="chip kind">{lessonKind(l, unit)}</span>}
           {phase === 'live' ? <span class="chip accent">上課中</span> : phase === 'later' && rel && <span class="chip accent">{rel}</span>}
         </span>
         {(title || !inUnit) && <span class={`ls-title ${title ? '' : 'muted'}`}>{title || '標題待定'}</span>}

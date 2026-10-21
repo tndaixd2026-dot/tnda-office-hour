@@ -1,9 +1,9 @@
-import { useId, useRef, useState } from 'preact/hooks';
+import { useRef, useState } from 'preact/hooks';
 import type { Lesson, LessonInfo, LessonsState, LessonUnit } from '../../api/types';
 import { clock, useApi, useBusy, useLive } from '../../app/hooks';
 import { errorText } from '../../app/messages';
 import { download } from '../../lib/files';
-import { byWeek, monday, scheduleJson, teacherList, unitLabel, unitNo, unitOf } from '../../lib/lessons';
+import { byWeek, kindClass, monday, scheduleJson, teacherClass, teacherList, unitLabel, unitNo, unitOf } from '../../lib/lessons';
 import { addDays, DOW, hm, isoDow, md, minutes } from '../../lib/time';
 import { confirm, openDialog } from '../../ui/dialog';
 import { Icon } from '../../ui/icons';
@@ -87,7 +87,18 @@ export function LessonsAdmin() {
     openDialog(
       u ? `編輯${unitLabel(u)}` : `新增${kind}單元`,
       (close) => (
-        <UnitForm u={u} type={u?.type ?? kind} units={st.units} lessons={st.lessons} today={clock.today} close={close} submit={submit} remove={removeUnit} />
+        <UnitForm
+          u={u}
+          type={u?.type ?? kind}
+          types={st.types}
+          units={st.units}
+          lessons={st.lessons}
+          teachers={teachers}
+          today={clock.today}
+          close={close}
+          submit={submit}
+          remove={removeUnit}
+        />
       ),
       { wide: 'wide' },
     );
@@ -180,9 +191,9 @@ export function LessonsAdmin() {
           </Btn>
         </div>
         <p class="muted small" style={{ maxWidth: '600px' }}>
-          每種類型可以分成幾個單元，例如基礎教學（一）、（二）。勾選每個單元在哪幾堂上，學生會在公開頁看到單元的主題和說明
+          每種類型先列好（一）到（十），主題和說明由你們填，再勾選每個單元在哪幾堂上。學生會在公開頁看到有主題或有排課的單元。不夠用就按「新增單元」，用不到的打開後刪除
         </p>
-        <Seg label="單元的類型" value={kind} onChange={setTab} options={st.types.map((t) => ({ value: t, label: t }))} />
+        <Seg label="單元的類型" value={kind} onChange={setTab} options={kindOptions(st.types)} />
         {kindUnits.length === 0 ? (
           <Empty icon="layers" title={`${kind}還沒有單元`}>
             按「新增單元」，填主題，再勾選要上這個單元的日期
@@ -192,11 +203,22 @@ export function LessonsAdmin() {
             {kindUnits.map((u) => {
               const mine = st.lessons.filter((l) => l.unit === u.id);
               return (
-                <button type="button" key={u.id} class="li top ls-edit" onClick={() => editUnit(u)}>
+                <button type="button" key={u.id} class={`li top ls-edit ls-unit-row ${kindClass(st.types, u.type)}`} onClick={() => editUnit(u)}>
                   <span class="ls-no">{unitNo(u)}</span>
                   <span class="grow stack tight">
-                    <span class="ls-title">{u.title}</span>
-                    <span class="small muted">{mine.length ? `${mine.map((l) => `${md(l.date)} ${l.teacher}`).join('、')} 共 ${mine.length} 堂` : '還沒勾日期'}</span>
+                    <span class={`ls-title ${u.title ? '' : 'muted'}`}>{u.title || '主題待定'}</span>
+                    {mine.length ? (
+                      <span class="small muted ls-dates">
+                        {mine.map((l) => (
+                          <span key={l.id}>
+                            {md(l.date)} <span class={`ls-who ${teacherClass(teachers, l.teacher)}`}>{l.teacher}</span>
+                          </span>
+                        ))}
+                        <span>共 {mine.length} 堂</span>
+                      </span>
+                    ) : (
+                      <span class="small muted">還沒勾日期</span>
+                    )}
                   </span>
                   <Icon name="edit" class="ls-pen" />
                 </button>
@@ -243,6 +265,7 @@ export function LessonsAdmin() {
                       key={l.id}
                       l={l}
                       unit={unitOf(l, st.units)}
+                      types={st.types}
                       teachers={teachers}
                       today={clock.today}
                       phase={l.date < clock.today ? 'past' : 'later'}
@@ -303,7 +326,6 @@ function LessonForm({
   const [title, setTitle] = useState(l?.title ?? '');
   const [topic, setTopic] = useState(l?.topic ?? '');
   const [err, setErr] = useState<string | null>(null);
-  const listId = useId();
   const typeUnits = units.filter((u) => u.type === type);
   const badTime = end <= start;
   const ready = !badTime && Boolean(date) && teacher.trim().length > 0;
@@ -366,10 +388,9 @@ function LessonForm({
           </select>
         </Field>
       </div>
-      <Field label="講師" help={teachers.length ? `可以直接選：${teachers.join('、')}` : undefined}>
+      <Field label="講師" help={teachers.length ? '點下面的名字直接選，或輸入新的講師' : undefined}>
         <input
           class="input"
-          list={listId}
           required
           maxLength={20}
           value={teacher}
@@ -379,11 +400,24 @@ function LessonForm({
           }}
         />
       </Field>
-      <datalist id={listId}>
-        {teachers.map((t) => (
-          <option key={t} value={t} />
-        ))}
-      </datalist>
+      {teachers.length > 0 && (
+        <div class="row wrap" role="group" aria-label="直接選名字" style={{ marginTop: '-6px' }}>
+          {teachers.map((t) => (
+            <button
+              type="button"
+              key={t}
+              class={`ls-tg ${teacherClass(teachers, t)}`}
+              aria-pressed={teacher.trim() === t}
+              onClick={() => {
+                setTeacher(t);
+                setErr(null);
+              }}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      )}
       <div class="field">
         <span class="label">類型</span>
         <Seg
@@ -394,7 +428,7 @@ function LessonForm({
             setType(t);
             setUnit(t === l?.type ? l.unit : null);
           }}
-          options={types.map((t) => ({ value: t, label: t }))}
+          options={kindOptions(types)}
         />
       </div>
       {typeUnits.length > 0 && (
@@ -404,7 +438,7 @@ function LessonForm({
             {typeUnits.map((u) => (
               <option key={u.id} value={u.id}>
                 {unitNo(u)}
-                {u.title}
+                {u.title || '主題待定'}
               </option>
             ))}
           </select>
@@ -448,8 +482,10 @@ function LessonForm({
 function UnitForm({
   u,
   type,
+  types,
   units,
   lessons,
+  teachers,
   today,
   close,
   submit,
@@ -457,8 +493,10 @@ function UnitForm({
 }: {
   u: LessonUnit | null;
   type: string;
+  types: string[];
   units: LessonUnit[];
   lessons: Lesson[];
+  teachers: string[];
   today: string;
   close: () => void;
   submit: Submit;
@@ -472,7 +510,6 @@ function UnitForm({
   const [picked, setPicked] = useState<number[]>(() => (u ? lessons.filter((l) => l.unit === u.id).map((l) => l.id) : []));
   const [err, setErr] = useState<string | null>(null);
   const choices = lessons.filter((l) => l.type === type);
-  const ready = title.trim().length > 0;
   const toggle = (id: number) => {
     setPicked(picked.includes(id) ? picked.filter((x) => x !== id) : [...picked, id]);
     setErr(null);
@@ -483,13 +520,15 @@ function UnitForm({
       class="stack"
       onSubmit={async (e) => {
         e.preventDefault();
-        if (!ready) return;
         const msg = await submit('oh_admin_lesson_unit_save', { p: { id: u?.id ?? null, type, no, title, topic, lessons: picked } }, u ? '已儲存單元' : '已新增單元');
         if (msg) setErr(msg);
         else close();
       }}
     >
-      <h2>{u ? `編輯${unitLabel(u)}` : `新增${type}單元`}</h2>
+      <h2 class={kindClass(types, type)}>
+        <span class="sw" aria-hidden="true" />
+        {u ? `編輯${unitLabel(u)}` : `新增${type}單元`}
+      </h2>
       {places > 1 && (
         <Field label="編號" help="改編號時，其他單元會跟著往前或往後移">
           <select class="select" value={no} onChange={(e) => setNo(Number((e.target as HTMLSelectElement).value))}>
@@ -501,10 +540,9 @@ function UnitForm({
           </select>
         </Field>
       )}
-      <Field label="主題" count={title.length} max={80}>
+      <Field label="主題" optional help="可以先空著，之後再填。空著時公開頁會寫主題待定" count={title.length} max={80}>
         <input
           class="input"
-          required
           maxLength={80}
           value={title}
           onInput={(e) => {
@@ -530,7 +568,8 @@ function UnitForm({
                 <label class={`check ${l.date < today ? 'muted' : ''}`} key={l.id}>
                   <input type="checkbox" checked={picked.includes(l.id)} onChange={() => toggle(l.id)} />
                   <span>
-                    {md(l.date)} {DOW[isoDow(l.date)]} <span class="mono">{l.start}</span> {l.teacher}
+                    {md(l.date)} {DOW[isoDow(l.date)]} <span class="mono">{l.start}</span>{' '}
+                    <span class={`ls-who ${teacherClass(teachers, l.teacher)}`}>{l.teacher}</span>
                     {other && !picked.includes(l.id) && <span class="tiny muted">　目前在{unitNo(other)}</span>}
                   </span>
                 </label>
@@ -561,12 +600,25 @@ function UnitForm({
         <button type="button" class="btn" onClick={close}>
           取消
         </button>
-        <button type="submit" class="btn primary" disabled={!ready}>
+        <button type="submit" class="btn primary">
           儲存
         </button>
       </div>
     </form>
   );
+}
+
+/** The lesson types for a segmented control, each with its colour. */
+function kindOptions(types: string[]) {
+  return types.map((t) => ({
+    value: t,
+    label: (
+      <span class={kindClass(types, t)}>
+        <span class="sw" aria-hidden="true" />
+        {t}
+      </span>
+    ),
+  }));
 }
 
 function InfoForm({ info, close, submit }: { info: LessonInfo; close: () => void; submit: Submit }) {

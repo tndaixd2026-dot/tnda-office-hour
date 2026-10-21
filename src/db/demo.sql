@@ -144,18 +144,18 @@ update app.requests r set questions = v.q
 drop function app._demo_request(int, int, text, text, text, text, int, text[], interval);
 drop function app._demo_appt(int, int, text, int, text, text);
 
--- TD units: the first few of each type, ticked on some of the planned lessons
-with u as (
-  insert into app.lesson_units (kind, sort, title, topic)
-  values ('基礎教學', 1, '介面與節點', E'認識 TouchDesigner 的介面、OP 的種類和怎麼接線\n請先裝好免費版並註冊帳號'),
-         ('基礎教學', 2, 'TOP 與影像合成', '用 TOP 做出第一個會動的畫面'),
-         ('基礎教學', 3, 'CHOP 與聲音互動', ''),
-         ('案例分享', 1, '展場互動裝置', '拆解兩個展場案子的系統架構'),
-         ('駐村創作', 1, '題目發想', '帶著想做的題目來，一起討論可行性')
-  returning id, kind, sort
-)
+-- TD units: the outline starts empty; give the first few a topic and tick them on some of the planned lessons
+update app.lesson_units u set title = v.title, topic = v.topic
+  from (values
+    ('基礎教學', 1, '介面與節點', E'認識 TouchDesigner 的介面、OP 的種類和怎麼接線\n請先裝好免費版並註冊帳號'),
+    ('基礎教學', 2, 'TOP 與影像合成', '用 TOP 做出第一個會動的畫面'),
+    ('基礎教學', 3, 'CHOP 與聲音互動', ''),
+    ('案例分享', 1, '展場互動裝置', '拆解兩個展場案子的系統架構'),
+    ('駐村創作', 1, '題目發想', '帶著想做的題目來，一起討論可行性')
+  ) as v (kind, sort, title, topic)
+ where u.kind = v.kind and u.sort = v.sort;
 update app.lessons l set unit_id = u.id
-  from u, (values
+  from app.lesson_units u, (values
     ('2026-10-26', '基礎教學', 1), ('2026-10-27', '基礎教學', 1),
     ('2026-11-02', '基礎教學', 2), ('2026-11-03', '基礎教學', 2),
     ('2026-11-06', '案例分享', 1), ('2026-11-10', '案例分享', 1),

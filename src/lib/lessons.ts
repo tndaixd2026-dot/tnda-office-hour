@@ -14,6 +14,16 @@ export function teacherClass(teachers: string[], name: string): string {
   return `tc${Math.max(0, teachers.indexOf(name)) % 4}`;
 }
 
+/** Colour class for a lesson type (k0…k2), in the order of `types`; set apart from the teachers' colours. */
+export function kindClass(types: string[], type: string): string {
+  return `k${Math.max(0, types.indexOf(type)) % 3}`;
+}
+
+/** Whether students see a unit on its own: it has lessons, or at least a topic. */
+export function unitShown(u: LessonUnit, lessons: Lesson[]): boolean {
+  return Boolean(u.title || u.topic) || lessons.some((l) => l.unit === u.id);
+}
+
 export function monday(d: string): string {
   return addDays(d, 1 - isoDow(d));
 }

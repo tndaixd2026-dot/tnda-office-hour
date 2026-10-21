@@ -22,7 +22,7 @@ const FIELD: Record<string, string> = {
   lesson_info: '標題需為 1–40 字，副標題最多 80 字，地點最多 200 字，公告最多 500 字',
   lessons: '檔案格式不對：需要有 sessions 清單，最多 500 堂',
   units: '檔案格式不對：units 需要是清單，最多 200 個單元',
-  unit: '請輸入單元主題（最多 80 字），說明最多 1000 字',
+  unit: '單元主題最多 80 字，說明最多 1000 字',
   unit_lessons: '有勾選的課已經被刪除或改了類型，請重新整理後再試',
   mail: '請輸入正確的 Email，稱呼最多 40 字',
   kind: '不支援的操作',
