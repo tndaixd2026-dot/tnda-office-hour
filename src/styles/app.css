@@ -30,14 +30,24 @@
   --info: #2f5bd3;
   --info-soft: #e7edfb;
   --focus: #2f5bd3;
-  /* TD lesson types, apart from the teachers' blue, orange, teal */
-  --k0: #17703a;
-  --k0-soft: #e2f2e7;
-  --k1: #6b3fc2;
-  --k1-soft: #eee8fa;
-  --k2: #ad2366;
-  --k2-soft: #fae6ef;
-  --teal: #0e6f82;
+  /* TD lesson types, the same fills in both themes: the colour itself,
+     the text on it, a tint behind ink, and a shade for coloured text */
+  --k0: #fcd0a1;
+  --k0-on: #161514;
+  --k0-soft: #fef4e8;
+  --k0-text: #8a4510;
+  --k1: #53917e;
+  --k1-on: #161514;
+  --k1-soft: #d6e5e0;
+  --k1-text: #2f6e5c;
+  --k2: #6d1a36;
+  --k2-on: #ffffff;
+  --k2-soft: #dcc8cf;
+  --k2-text: #6d1a36;
+  /* an edge for pale swatches and chips */
+  --ring: rgb(22 21 20 / 0.14);
+  /* teachers: blue, orange, violet */
+  --violet: #6b3fc2;
 
   --btn: var(--ink);
   --btn-ink: #ffffff;
@@ -87,13 +97,14 @@
     --info: #86a8ff;
     --info-soft: #18213a;
     --focus: #86a8ff;
-    --k0: #6fd397;
-    --k0-soft: #14291c;
-    --k1: #b9a0ff;
-    --k1-soft: #251c3b;
-    --k2: #ff8fc4;
-    --k2-soft: #38182a;
-    --teal: #5fcbe0;
+    --k0-soft: #53483a;
+    --k0-text: #fcd0a1;
+    --k1-soft: #273731;
+    --k1-text: #7fc2ad;
+    --k2-soft: #2e191e;
+    --k2-text: #e58aa8;
+    --ring: rgb(255 255 255 / 0.16);
+    --violet: #b9a0ff;
     --btn: #f3f1ec;
     --btn-ink: #161514;
     --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
@@ -126,13 +137,14 @@
   --info: #86a8ff;
   --info-soft: #18213a;
   --focus: #86a8ff;
-  --k0: #6fd397;
-  --k0-soft: #14291c;
-  --k1: #b9a0ff;
-  --k1-soft: #251c3b;
-  --k2: #ff8fc4;
-  --k2-soft: #38182a;
-  --teal: #5fcbe0;
+  --k0-soft: #53483a;
+  --k0-text: #fcd0a1;
+  --k1-soft: #273731;
+  --k1-text: #7fc2ad;
+  --k2-soft: #2e191e;
+  --k2-text: #e58aa8;
+  --ring: rgb(255 255 255 / 0.16);
+  --violet: #b9a0ff;
   --btn: #f3f1ec;
   --btn-ink: #161514;
   --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
@@ -2427,7 +2439,7 @@ table.t tr.mine td {
   --tc: var(--accent);
 }
 .tc2 {
-  --tc: var(--teal);
+  --tc: var(--violet);
 }
 .tc3 {
   --tc: var(--warn);
@@ -2435,19 +2447,26 @@ table.t tr.mine td {
 /* one colour per lesson type, shown as a square, a bar or a tinted chip; the type is always written too */
 .k0 {
   --kc: var(--k0);
+  --kc-on: var(--k0-on);
   --kc-soft: var(--k0-soft);
+  --kc-text: var(--k0-text);
 }
 .k1 {
   --kc: var(--k1);
+  --kc-on: var(--k1-on);
   --kc-soft: var(--k1-soft);
+  --kc-text: var(--k1-text);
 }
 .k2 {
   --kc: var(--k2);
+  --kc-on: var(--k2-on);
   --kc-soft: var(--k2-soft);
+  --kc-text: var(--k2-text);
 }
 .chip.kind {
-  background: var(--kc-soft);
-  color: var(--kc);
+  background: var(--kc);
+  color: var(--kc-on);
+  box-shadow: inset 0 0 0 1px var(--ring);
   font-weight: 600;
 }
 .sw {
@@ -2458,6 +2477,7 @@ table.t tr.mine td {
   margin-right: 7px;
   border-radius: 3px;
   background: var(--kc);
+  box-shadow: inset 0 0 0 1px var(--ring);
   vertical-align: 0;
 }
 /* a lesson or unit row: a bar in its type's colour */
@@ -2587,7 +2607,7 @@ table.t tr.mine td {
   flex: 0 0 auto;
   min-width: 3em;
   font-weight: 800;
-  color: var(--kc, var(--ink));
+  color: var(--kc-text, var(--ink));
 }
 .ls-unit {
   border-left: 4px solid var(--kc);
