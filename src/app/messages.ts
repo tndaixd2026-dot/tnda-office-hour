@@ -83,6 +83,9 @@ export function errorText(e: unknown, s?: Pick<Settings, 'cancel_hours'>): strin
       return `這週的預約已在 ${e.detail} 截止，要調整請在 Discord 告訴助教`;
     case 'CANCEL_LATE':
       return `距離開始不到 ${s?.cancel_hours ?? 24} 小時，請直接在 Discord 告訴助教`;
+    case 'SERVER':
+      // the database's own words, so a report can say what went wrong
+      return e.detail ? `${MESSAGES.SERVER}（${e.detail.slice(0, 120)}）` : MESSAGES.SERVER;
     case 'NEEDS_FORCE':
       return e.detail
         .split(',')

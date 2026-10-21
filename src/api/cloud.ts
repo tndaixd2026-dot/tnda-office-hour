@@ -44,7 +44,7 @@ export function cloudEngine(url: string, key: string): Engine {
       if (error) {
         if (error.code === 'P0001') throw new ApiError(error.message, error.details ?? '');
         if (!error.code || /fetch|network/i.test(error.message)) throw new ApiError('NETWORK');
-        throw new ApiError('SERVER', error.message);
+        throw new ApiError('SERVER', `${error.code} ${error.message}`);
       }
       return data as T;
     },
