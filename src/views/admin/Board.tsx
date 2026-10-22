@@ -58,6 +58,10 @@ function BoardView({ st, reload }: { st: AdminState; reload: () => void }) {
   const scheduledGroups = new Set(st.appointments.filter((a) => a.status === 'confirmed').map((a) => a.group_id));
   const tName = (id: number) => st.teachers.find((t) => t.id === id)?.name ?? '—';
   const gOf = (id: number) => st.groups.find((g) => g.id === id);
+  // a paired group meets only its teachers (at most two); unpaired, anyone
+  const pairsOf = (gid: number) => gOf(gid)?.teacher_ids ?? [];
+  const meets = (gid: number, tid: number) => !pairsOf(gid).length || pairsOf(gid).includes(tid);
+  const pairText = (gid: number) => pairsOf(gid).map(tName).join('、');
 
   // ---------- grid geometry ----------
   const days = useMemo(() => {
@@ -186,7 +190,7 @@ function BoardView({ st, reload }: { st: AdminState; reload: () => void }) {
         <div class="stack tight">
           <p class="eyebrow">閃身步排程法</p>
           <h2>已建立 {proposal.length} 筆草稿</h2>
-          <p class="muted small">優先照顧本學期討論次數較少、較早送出的組。有搭配老師的組只排給那位老師，其他組盡量延續上次的 {st.settings.host_label}。草稿只有助教看得到</p>
+          <p class="muted small">優先照顧本學期討論次數較少、較早送出的組。有搭配老師的組只排給搭配的老師，其他組盡量延續上次的 {st.settings.host_label}。草稿只有助教看得到</p>
         </div>
         <div class="list">
           {proposal.map((p, i) => (
@@ -281,11 +285,8 @@ function BoardView({ st, reload }: { st: AdminState; reload: () => void }) {
 
   function openCell(d: string, t: string, teacher: number) {
     const key = `${d} ${t}`;
-    // groups paired with another teacher go last
-    const elsewhere = (gid: number) => {
-      const p = gOf(gid)?.teacher_id;
-      return p != null && p !== teacher;
-    };
+    // groups paired with other teachers go last
+    const elsewhere = (gid: number) => !meets(gid, teacher);
     const cands = (demandMap.get(key) ?? [])
       .slice()
       .sort((a, b) => Number(elsewhere(a.group_id)) - Number(elsewhere(b.group_id)) || needOf(b) - needOf(a) || a.created_at.localeCompare(b.created_at));
@@ -315,7 +316,7 @@ function BoardView({ st, reload }: { st: AdminState; reload: () => void }) {
                     <span class="tiny muted clamp-2">{r.topic}</span>
                   </div>
                   {other ? (
-                    <span class="chip warn">搭配 {tName(g.teacher_id!)}</span>
+                    <span class="chip warn">搭配 {pairText(g.id)}</span>
                   ) : (
                     <span class={`chip ${have >= Math.min(r.want, weekCap) ? 'ok' : sameDay ? 'warn' : ''}`}>
                       {sameDay ? '當天已有' : `已排 ${have}/${Math.min(r.want, weekCap)}`}
@@ -624,12 +625,8 @@ function BoardView({ st, reload }: { st: AdminState; reload: () => void }) {
                       .map((x) => x.id);
                     const past = `${d} ${t}` < nowStamp;
                     const want = (demandMap.get(key) ?? []).filter((r) => needOf(r) > 0 && !here.some((a) => a.group_id === r.group_id));
-                    // groups paired with another teacher do not count in this teacher's lane
-                    const wantFor = (tid: number) =>
-                      want.filter((r) => {
-                        const p = gOf(r.group_id)?.teacher_id;
-                        return p == null || p === tid;
-                      }).length;
+                    // groups paired with other teachers do not count in this teacher's lane
+                    const wantFor = (tid: number) => want.filter((r) => meets(r.group_id, tid)).length;
                     if (!lanes.length) return <div class={`mc off`} key={key} aria-hidden="true" />;
                     // demand heat, like the original prototype: darker = more groups want this slot
                     const heat = !past && want.length ? Math.min(1, want.length / maxDemand) : 0;
@@ -787,7 +784,7 @@ function BoardView({ st, reload }: { st: AdminState; reload: () => void }) {
                 <span class="topic">{r.topic}</span>
                 <span class="prog clamp-2 pre">{r.progress}</span>
                 <span class="meta">
-                  想約 {minutesText(r.want * mins)}{g?.teacher_id ? ` · 搭配 ${tName(g.teacher_id)}` : ''} · 勾了 {r.slots.length} 格 / {days} 天 · {r.author} {agoText(r.updated_at, now)}
+                  想約 {minutesText(r.want * mins)}{pairsOf(r.group_id).length ? ` · 搭配 ${pairText(r.group_id)}` : ''} · 勾了 {r.slots.length} 格 / {days} 天 · {r.author} {agoText(r.updated_at, now)}
                 </span>
                 {focus === r.group_id && (
                   <span class="stack tight">

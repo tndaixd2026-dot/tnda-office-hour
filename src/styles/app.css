@@ -2434,6 +2434,25 @@ table.t tr.mine td {
   flex: 0 0 auto;
 }
 
+/* a group's teachers on the groups page: checkboxes in a row */
+fieldset.pairs {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+fieldset.pairs > legend {
+  padding: 0;
+  margin-bottom: 6px;
+}
+fieldset.pairs .row {
+  column-gap: 18px;
+  row-gap: 0;
+}
+.check:has(input:disabled) {
+  color: var(--faint);
+  cursor: not-allowed;
+}
+
 /* an email, as it will arrive */
 .mail-frame {
   width: 100%;

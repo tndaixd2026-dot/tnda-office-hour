@@ -598,7 +598,9 @@ describe('group teachers', () => {
   let w7: number;
   let admin: string;
   let g1: string;
-  let ids: { joseph: number; prolong: number; team: number; g1: number; g2: number };
+  let ids: { joseph: number; prolong: number; tim: number; team: number; g1: number; g2: number };
+  const pairs = async () => (await db.call('oh_admin_config', { p_token: admin })).groups.find((g: any) => g.id === ids.g1).teacher_ids;
+  const pair = (p: Record<string, unknown>) => db.call('oh_admin_save', { p_token: admin, p_kind: 'group', p: { id: ids.g1, ...p } });
   beforeAll(async () => {
     db = await makeDb();
     await db.setNow(WED);
@@ -609,26 +611,39 @@ describe('group teachers', () => {
     ids = {
       joseph: await teacherId(db, 'Joseph'),
       prolong: await teacherId(db, 'Prolong'),
+      tim: await teacherId(db, 'Tim'),
       team: (await db.one('select id from app.teachers where team')).id,
       g1: await groupId(db, 1),
       g2: await groupId(db, 2),
     };
   });
 
-  it('lets admins pair a group with one teacher, never the shared account', async () => {
-    const r = await db.call('oh_admin_save', { p_token: admin, p_kind: 'group', p: { id: ids.g1, teacher_id: ids.prolong } });
-    expect(r.teacher_id).toBe(ids.prolong);
+  it('lets admins pair a group with up to two teachers, never the shared account', async () => {
+    expect((await pair({ teacher_ids: [ids.prolong] })).teacher_ids).toEqual([ids.prolong]);
+    expect(await pairs()).toEqual([ids.prolong]);
     const cfg = await db.call('oh_admin_config', { p_token: admin });
-    expect(cfg.groups.find((g: any) => g.id === ids.g1).teacher_id).toBe(ids.prolong);
-    expect(cfg.groups.find((g: any) => g.id === ids.g2).teacher_id).toBeNull();
+    expect(cfg.groups.find((g: any) => g.id === ids.g2).teacher_ids).toEqual([]);
     const st = await db.call('oh_admin_state', { p_token: admin });
-    expect(st.groups.find((g: any) => g.id === ids.g1).teacher_id).toBe(ids.prolong);
-    await expectCode(db.call('oh_admin_save', { p_token: admin, p_kind: 'group', p: { id: ids.g1, teacher_id: ids.team } }), 'NOT_FOUND', 'teacher');
-    await expectCode(db.call('oh_admin_save', { p_token: admin, p_kind: 'group', p: { id: ids.g1, teacher_id: 9999 } }), 'VALIDATION', 'group');
-    // saving other fields keeps the pairing
-    await db.call('oh_admin_save', { p_token: admin, p_kind: 'group', p: { id: ids.g1, name: '改名' } });
-    expect((await db.one('select teacher_id from app.groups where id = $1', [ids.g1])).teacher_id).toBe(ids.prolong);
-    await expectCode(db.call('oh_admin_save', { p_token: g1, p_kind: 'group', p: { id: ids.g1, teacher_id: null } }), 'FORBIDDEN');
+    expect(st.groups.find((g: any) => g.id === ids.g1).teacher_ids).toEqual([ids.prolong]);
+    await expectCode(pair({ teacher_ids: [ids.team] }), 'NOT_FOUND', 'teacher');
+    await expectCode(pair({ teacher_ids: [9999] }), 'VALIDATION', 'group');
+    await expectCode(pair({ teacher_ids: [ids.joseph, ids.prolong, ids.tim] }), 'VALIDATION', 'teachers');
+    await expectCode(pair({ teacher_ids: [ids.tim, ids.tim] }), 'VALIDATION', 'teachers');
+    await expectCode(pair({ teacher_ids: 'Tim' }), 'VALIDATION', 'teachers');
+    expect(await pairs()).toEqual([ids.prolong]); // failed saves change nothing
+    // the database itself never holds a third teacher
+    await db.sql('insert into app.group_teachers (group_id, teacher_id) values ($1, $2), ($1, $3)', [ids.g2, ids.joseph, ids.tim]);
+    await expect(db.sql('insert into app.group_teachers (group_id, teacher_id) values ($1, $2)', [ids.g2, ids.prolong])).rejects.toThrow();
+    await db.sql('delete from app.group_teachers where group_id = $1', [ids.g2]);
+    // saving other fields keeps the pairing; a page from before sends one teacher_id
+    await pair({ name: '改名' });
+    expect(await pairs()).toEqual([ids.prolong]);
+    await pair({ teacher_id: ids.joseph });
+    expect(await pairs()).toEqual([ids.joseph]);
+    await pair({ teacher_id: null });
+    expect(await pairs()).toEqual([]);
+    await pair({ teacher_ids: [ids.prolong] });
+    await expectCode(db.call('oh_admin_save', { p_token: g1, p_kind: 'group', p: { id: ids.g1, teacher_ids: [] } }), 'FORBIDDEN');
   });
 
   it("offers a paired group only its teacher's slots", async () => {
@@ -639,12 +654,19 @@ describe('group teachers', () => {
     expect(st.slots.every((x: any) => [W7.wed, W7.thu, W7.fri].includes(x.d) && x.t < '12:00')).toBe(true);
     expect(st.weeks[0].bookable).toBe(true);
     expect(st.pair).toBeNull(); // teacher names are hidden from students by default
-    await db.sql('update app.settings set show_teacher_names = true');
-    expect((await db.call('oh_student_state', { p_token: g1 })).pair).toBe('Prolong');
-    await db.sql('update app.settings set show_teacher_names = false');
     // Joseph's Monday slot cannot be requested
     await expectCode(db.call('oh_request_save', { p_token: g1, ...basicRequest(w7, [[W7.mon, '17:00']]) }), 'SLOT_INVALID');
     await db.call('oh_request_save', { p_token: g1, ...basicRequest(w7, [[W7.wed, '10:00'], [W7.thu, '10:00']]) });
+  });
+
+  it('offers the slots of both teachers when paired with two', async () => {
+    await pair({ teacher_ids: [ids.tim, ids.prolong] });
+    expect(await pairs()).toEqual([ids.prolong, ids.tim]); // in the teachers' order
+    const st = await db.call('oh_student_state', { p_token: g1 });
+    expect(st.slots).toHaveLength(16); // Prolong's 12 and Tim's Thursday 16:00–18:00
+    await db.sql('update app.settings set show_teacher_names = true');
+    expect((await db.call('oh_student_state', { p_token: g1 })).pair).toBe('Prolong、Tim');
+    await db.sql('update app.settings set show_teacher_names = false');
   });
 
   it('asks before placing a paired group with another teacher', async () => {
@@ -659,7 +681,7 @@ describe('group teachers', () => {
   });
 
   it('can unpair a group again', async () => {
-    await db.call('oh_admin_save', { p_token: admin, p_kind: 'group', p: { id: ids.g1, teacher_id: null } });
+    await pair({ teacher_ids: [] });
     expect((await db.call('oh_student_state', { p_token: g1 })).slots).toHaveLength(24);
   });
 });

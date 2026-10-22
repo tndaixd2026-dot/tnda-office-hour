@@ -104,7 +104,7 @@ export function GroupsPage() {
           <p class="eyebrow">小組與邀請</p>
           <h1 class="title-l">{cfg.groups.length} 個小組</h1>
           <p class="muted small" style={{ maxWidth: '560px' }}>
-            在每組的「學生名單」填上同學的名字，同學到首頁輸入自己的名字就能登入；也可以把邀請連結貼到各組的 Discord，點開、輸入名字加入。整組共用同一份預約。每組可以搭配一位老師，隨時都能改
+            在每組的「學生名單」填上同學的名字，同學到首頁輸入自己的名字就能登入；也可以把邀請連結貼到各組的 Discord，點開、輸入名字加入。整組共用同一份預約。每組可以搭配一到兩位老師，隨時都能改
           </p>
         </div>
         <div class="row wrap">
@@ -118,7 +118,7 @@ export function GroupsPage() {
       </div>
       <div class="group-grid">
         {cfg.groups.map((g) => (
-          <GroupCard key={g.id} g={g} teachers={cfg.teachers.filter((t) => !t.team && (t.active || t.id === g.teacher_id))} now={now} save={save} reload={reload} />
+          <GroupCard key={g.id} g={g} teachers={cfg.teachers.filter((t) => !t.team && (t.active || g.teacher_ids.includes(t.id)))} now={now} save={save} reload={reload} />
         ))}
       </div>
     </main>
@@ -141,7 +141,12 @@ function GroupCard({
   const { call } = useApi();
   const { busy, run } = useBusy();
   const link = inviteLink(g.code);
-  const pair = teachers.find((t) => t.id === g.teacher_id);
+  const pairs = teachers.filter((t) => g.teacher_ids.includes(t.id));
+  const names = (ts: ConfigTeacher[]) => ts.map((t) => t.name).join('、');
+  const togglePair = (t: ConfigTeacher, on: boolean) => {
+    const next = teachers.filter((x) => (x.id === t.id ? on : g.teacher_ids.includes(x.id)));
+    save({ id: g.id, teacher_ids: next.map((x) => x.id) }, next.length ? `第 ${g.no} 組改成搭配 ${names(next)}` : `第 ${g.no} 組改成不指定老師`);
+  };
 
   const editRoster = async () => {
     let text = g.roster.join('\n');
@@ -232,25 +237,22 @@ function GroupCard({
           )}
         </Menu>
       </div>
-      <Field label="搭配老師" help={pair ? `只會排到 ${pair.name} 的時段，學生也只看得到這些時段` : '不指定時，所有老師的時段都可以排'}>
-        <select
-          class="select"
-          value={String(g.teacher_id ?? '')}
-          onChange={(e) => {
-            const v = (e.target as HTMLSelectElement).value;
-            const t = teachers.find((x) => String(x.id) === v);
-            save({ id: g.id, teacher_id: t ? t.id : null }, t ? `第 ${g.no} 組改成搭配 ${t.name}` : `第 ${g.no} 組改成不指定老師`);
-          }}
-        >
-          <option value="">不指定</option>
-          {teachers.map((t) => (
-            <option key={t.id} value={String(t.id)}>
-              {t.name}
-              {t.active ? '' : '（停用中）'}
-            </option>
-          ))}
-        </select>
-      </Field>
+      <fieldset class="field pairs">
+        <legend class="label">搭配老師（最多兩位）</legend>
+        <div class="row wrap">
+          {teachers.map((t) => {
+            const on = g.teacher_ids.includes(t.id);
+            return (
+              <label class="check" key={t.id}>
+                <input type="checkbox" checked={on} disabled={!on && pairs.length >= 2} onChange={() => togglePair(t, !on)} />
+                {t.name}
+                {t.active ? '' : '（停用中）'}
+              </label>
+            );
+          })}
+        </div>
+        <span class="help">{pairs.length ? `只會排到 ${names(pairs)} 的時段，學生也只看得到這些時段` : '都不勾時，所有老師的時段都可以排'}</span>
+      </fieldset>
       <div class="card sunk tight stack tight">
         <span class="eyebrow">邀請代碼</span>
         <span class="mono" style={{ fontSize: '19px', letterSpacing: '0.12em', fontWeight: 500 }}>
