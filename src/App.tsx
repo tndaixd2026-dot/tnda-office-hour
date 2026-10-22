@@ -22,16 +22,22 @@ function DemoBar() {
         <Icon name="play" size={14} />
         示範模式
       </span>
-      <Seg<Role>
-        label="切換身份"
-        value={demo.role}
-        onChange={(r) => switchDemoRole(r)}
-        options={[
-          { value: 'student', label: '學生' },
-          { value: 'admin', label: '助教' },
-          { value: 'teacher', label: '老師' },
-        ]}
-      />
+      {demo.studentOnly ? (
+        <span class="tiny" style={{ opacity: 0.85 }}>
+          以學生身份試玩
+        </span>
+      ) : (
+        <Seg<Role>
+          label="切換身份"
+          value={demo.role}
+          onChange={(r) => switchDemoRole(r)}
+          options={[
+            { value: 'student', label: '學生' },
+            { value: 'admin', label: '助教' },
+            { value: 'teacher', label: '老師' },
+          ]}
+        />
+      )}
       <span class="grow" />
       <span class="tiny" style={{ opacity: 0.85 }}>
         資料只存在這個分頁

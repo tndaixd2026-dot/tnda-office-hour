@@ -66,7 +66,8 @@ try {
   await run('welcome screen', async () => {
     await page.goto(base, { waitUntil: 'networkidle' });
     await page.getByRole('heading', { name: '輸入你的名字' }).waitFor();
-    check(await page.getByRole('button', { name: /試玩示範/ }).isVisible(), 'demo button missing');
+    check(await page.getByRole('button', { name: '試玩預約流程' }).isVisible(), 'demo button missing');
+    await page.getByRole('heading', { name: '學生怎麼預約' }).waitFor();
     check(await page.getByRole('link', { name: '查看 TD 專班課表' }).isVisible(), 'TD timetable link missing');
     // invite codes are one tap away, and back
     await page.getByRole('button', { name: '我有邀請代碼' }).click();
@@ -76,8 +77,16 @@ try {
   });
 
   await run('demo boots in the browser', async () => {
-    await page.getByRole('button', { name: /試玩示範/ }).click();
+    // the sign-in page's demo is students only
+    await page.getByRole('button', { name: '試玩預約流程' }).click();
     await page.locator('.demobar').waitFor({ timeout: 60000 });
+    await page.getByText('下一次 Office Hour').waitFor();
+    check(!(await page.locator('.demobar').getByRole('group', { name: '切換身份' }).count()), 'the sign-in demo should not switch roles');
+    await page.locator('.demobar').getByRole('button', { name: '離開' }).click();
+    await page.getByRole('heading', { name: '輸入你的名字' }).waitFor();
+    // #/demo still has every role
+    await page.goto(base + '#/demo', { waitUntil: 'domcontentloaded' });
+    await page.locator('.demobar').getByRole('group', { name: '切換身份' }).waitFor({ timeout: 60000 });
     await page.getByText('下一次 Office Hour').waitFor();
   });
 

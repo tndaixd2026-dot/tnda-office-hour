@@ -652,6 +652,19 @@ a.place {
   text-underline-offset: 3px;
   overflow-wrap: anywhere;
 }
+/* numbered how-to steps on the sign-in page */
+.howto {
+  margin: 0;
+  padding-left: 1.4em;
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.howto li::marker {
+  color: var(--accent-text);
+  font-weight: 700;
+}
 .link-btn {
   background: none;
   border: 0;

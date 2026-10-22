@@ -6,7 +6,7 @@ TN0006 的 Office Hour 預約平台。
 TN0006「一場體驗如何發生：跨域數位製作實務」的 Office Hour 預約平台。學生勾選可以的時段，助教一鍵排程，全組、老師、助教的畫面即時同步。
 
 - 正式網站：<https://tndaixd2026-dot.github.io/tnda-office-hour/>
-- 示範模式（不需代碼，三種角色都能試）：<https://tndaixd2026-dot.github.io/tnda-office-hour/#/demo>
+- 示範模式（不需代碼，三種角色都能試）：<https://tndaixd2026-dot.github.io/tnda-office-hour/#/demo>。首頁的「試玩預約流程」只開學生身份，旁邊列出學生怎麼預約
 - TD 專班課表（週三 VSAI 的助教課，公開、不用登入）：<https://tndaixd2026-dot.github.io/tnda-office-hour/#/td>
 
 ![Office Hour](public/og.png)

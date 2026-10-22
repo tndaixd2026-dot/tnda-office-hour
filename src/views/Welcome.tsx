@@ -4,7 +4,8 @@ import type { JoinResult, PeekResult, Settings } from '../api/types';
 import { errorText } from '../app/messages';
 import { go } from '../app/router';
 import { signedIn, startDemo, useApp } from '../app/session';
-import { APP_NAME, APP_SHORT_NAME, HAS_CLOUD } from '../config';
+import { APP_NAME, APP_SHORT_NAME, HAS_CLOUD, RECORDING_NOTE } from '../config';
+import { closeRuleText } from '../lib/format';
 import { Icon } from '../ui/icons';
 import { BrandMark, Btn, Field } from '../ui/kit';
 
@@ -174,13 +175,32 @@ export function Welcome({ initialCode }: { initialCode?: string }) {
       <span>這個網站還沒有連接雲端資料庫。你可以先用示範模式看看完整功能</span>
     </div>
   );
+  const deadline = settings ? closeRuleText(settings) : '截止時間';
+  const weekCap = settings?.week_cap ?? 3;
+  const dayCap = settings?.day_cap ?? 1;
+  const slot = settings?.slot_minutes ?? 30;
+  // how booking works, then a student-only demo to try it
   const demo = (
     <>
       <div class="divider" />
+      <section class="stack tight" aria-labelledby="howto">
+        <h2 id="howto" class="title-s">
+          學生怎麼預約
+        </h2>
+        <ol class="howto">
+          <li>輸入自己的名字登入，會自動進到你的組</li>
+          <li>選一週，按「開始預約」，勾選所有可以的時段，勾越多越容易排到</li>
+          <li>選想約幾次，寫下想討論的題目、想問 PM 的問題和目前進度，在{deadline} 前送出</li>
+          <li>助教排好後，首頁會出現時間和 Google Meet 連結，時間到了點進去就好</li>
+        </ol>
+        <p class="tiny muted">
+          每組每週最多 {weekCap} 次，每次 {slot} 分鐘，{dayCap === 1 ? '一天一次' : `一天最多 ${dayCap} 次`}。{RECORDING_NOTE}
+        </p>
+      </section>
       <div class="stack tight">
         <p class="small muted">{mode === 'name' ? '想先看看怎麼用？' : '還沒拿到代碼，或想先看看怎麼用？'}</p>
-        <Btn icon="play" loading={demoLoading} onClick={() => startDemo('student')}>
-          試玩示範（學生、助教、老師）
+        <Btn icon="play" loading={demoLoading} onClick={() => startDemo('student', { studentOnly: true })}>
+          試玩預約流程
         </Btn>
       </div>
     </>

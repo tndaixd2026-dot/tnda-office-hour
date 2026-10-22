@@ -14,6 +14,8 @@ export interface Auth {
 interface Demo {
   role: Role;
   tokens: Partial<Record<Role, Auth>>;
+  /** started from the sign-in page: students only, no switching to admin or teacher */
+  studentOnly?: boolean;
 }
 
 interface AppState {
@@ -110,7 +112,7 @@ export function updateSession(session: SessionInfo) {
 }
 
 // ---------- demo ----------
-export async function startDemo(role: Role = 'student') {
+export async function startDemo(role: Role = 'student', opts: { studentOnly?: boolean } = {}) {
   const s = app.get();
   if (s.demoLoading) return;
   try {
@@ -126,7 +128,7 @@ export async function startDemo(role: Role = 'student') {
         }
       });
     }
-    app.set((x) => ({ ...x, engine: demoEngine, demo: { role, tokens: {} }, demoLoading: false }));
+    app.set((x) => ({ ...x, engine: demoEngine, demo: { role, tokens: {}, studentOnly: opts.studentOnly }, demoLoading: false }));
     await switchDemoRole(role);
   } catch (e) {
     console.error(e);
@@ -137,7 +139,7 @@ export async function startDemo(role: Role = 'student') {
 
 export async function switchDemoRole(role: Role) {
   const s = app.get();
-  if (!s.demo || !demoEngine) return;
+  if (!s.demo || !demoEngine || (s.demo.studentOnly && role !== 'student')) return;
   let auth = s.demo.tokens[role];
   if (!auth) {
     const c = DEMO_CODES[role];
@@ -145,7 +147,7 @@ export async function switchDemoRole(role: Role) {
     if (!r.ok || !r.token || !r.session) throw new ApiError('CLIENT', 'demo join failed');
     auth = { token: r.token, session: r.session };
   }
-  app.set((x) => ({ ...x, auth: auth!, demo: { role, tokens: { ...x.demo!.tokens, [role]: auth! } } }));
+  app.set((x) => ({ ...x, auth: auth!, demo: { ...x.demo!, role, tokens: { ...x.demo!.tokens, [role]: auth! } } }));
   go(role === 'admin' ? 'admin' : '', { replace: true });
 }
 
@@ -156,7 +158,7 @@ export function exitDemo() {
 
 export function resetDemo() {
   demoEngine = null;
-  const role = app.get().demo?.role ?? 'student';
+  const { role = 'student', studentOnly } = app.get().demo ?? {};
   app.set((x) => ({ ...x, demo: null }));
-  startDemo(role);
+  startDemo(role, { studentOnly });
 }
