@@ -450,15 +450,16 @@ p {
   white-space: nowrap;
 }
 /* phones: the top bar (and the sign-in page, whose headline spells the
-   name out) keep only the short name; the narrowest ones show the
-   connection status as just its dot (the text stays for screen readers) */
+   name out) keep only the short name; phones up to 420px show the
+   connection status as just its dot (the text stays for screen readers),
+   so the signed-in name keeps its room */
 @media (max-width: 640px) {
   .topbar .brand-tail,
   .welcome-art .brand-tail {
     display: none;
   }
 }
-@media (max-width: 380px) {
+@media (max-width: 420px) {
   .topbar .live-text {
     position: absolute;
     width: 1px;

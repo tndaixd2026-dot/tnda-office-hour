@@ -174,7 +174,7 @@ for (const [i, m] of list.entries()) {
     continue;
   }
   try {
-    await mailer.sendMail({ from: { name: '叁式 30 分鐘 一週三次', address: user }, to: m.to, subject: m.subject, html: m.html, text: m.text });
+    await mailer.sendMail({ from: { name: '叁式 一天 30 分鐘 一週三次', address: user }, to: m.to, subject: m.subject, html: m.html, text: m.text });
     if (!['test', 'sample', 'sample_all'].includes(kind)) await db.query('select app.mail_sent($1, $2::date, $3, $4, $5)', [m.kind, m.week, m.to, m.subject, m.count]);
     console.log(`  sent ${label}`);
   } catch (e) {
