@@ -593,6 +593,77 @@ describe('administration', () => {
   });
 });
 
+describe('group teachers', () => {
+  let db: TestDb;
+  let w7: number;
+  let admin: string;
+  let g1: string;
+  let ids: { joseph: number; prolong: number; team: number; g1: number; g2: number };
+  beforeAll(async () => {
+    db = await makeDb();
+    await db.setNow(WED);
+    const c = await db.codes();
+    admin = await join(db, c.admin);
+    g1 = await join(db, c.groups[1], 'A');
+    w7 = await weekId(db, 'W7');
+    ids = {
+      joseph: await teacherId(db, 'Joseph'),
+      prolong: await teacherId(db, 'Prolong'),
+      team: (await db.one('select id from app.teachers where team')).id,
+      g1: await groupId(db, 1),
+      g2: await groupId(db, 2),
+    };
+  });
+
+  it('lets admins pair a group with one teacher, never the shared account', async () => {
+    const r = await db.call('oh_admin_save', { p_token: admin, p_kind: 'group', p: { id: ids.g1, teacher_id: ids.prolong } });
+    expect(r.teacher_id).toBe(ids.prolong);
+    const cfg = await db.call('oh_admin_config', { p_token: admin });
+    expect(cfg.groups.find((g: any) => g.id === ids.g1).teacher_id).toBe(ids.prolong);
+    expect(cfg.groups.find((g: any) => g.id === ids.g2).teacher_id).toBeNull();
+    const st = await db.call('oh_admin_state', { p_token: admin });
+    expect(st.groups.find((g: any) => g.id === ids.g1).teacher_id).toBe(ids.prolong);
+    await expectCode(db.call('oh_admin_save', { p_token: admin, p_kind: 'group', p: { id: ids.g1, teacher_id: ids.team } }), 'NOT_FOUND', 'teacher');
+    await expectCode(db.call('oh_admin_save', { p_token: admin, p_kind: 'group', p: { id: ids.g1, teacher_id: 9999 } }), 'VALIDATION', 'group');
+    // saving other fields keeps the pairing
+    await db.call('oh_admin_save', { p_token: admin, p_kind: 'group', p: { id: ids.g1, name: '改名' } });
+    expect((await db.one('select teacher_id from app.groups where id = $1', [ids.g1])).teacher_id).toBe(ids.prolong);
+    await expectCode(db.call('oh_admin_save', { p_token: g1, p_kind: 'group', p: { id: ids.g1, teacher_id: null } }), 'FORBIDDEN');
+  });
+
+  it("offers a paired group only its teacher's slots", async () => {
+    const st = await db.call('oh_student_state', { p_token: g1 });
+    expect(st.week_id).toBe(w7);
+    // Prolong is in on Wednesday, Thursday and Friday 10:00–12:00
+    expect(st.slots).toHaveLength(12);
+    expect(st.slots.every((x: any) => [W7.wed, W7.thu, W7.fri].includes(x.d) && x.t < '12:00')).toBe(true);
+    expect(st.weeks[0].bookable).toBe(true);
+    expect(st.pair).toBeNull(); // teacher names are hidden from students by default
+    await db.sql('update app.settings set show_teacher_names = true');
+    expect((await db.call('oh_student_state', { p_token: g1 })).pair).toBe('Prolong');
+    await db.sql('update app.settings set show_teacher_names = false');
+    // Joseph's Monday slot cannot be requested
+    await expectCode(db.call('oh_request_save', { p_token: g1, ...basicRequest(w7, [[W7.mon, '17:00']]) }), 'SLOT_INVALID');
+    await db.call('oh_request_save', { p_token: g1, ...basicRequest(w7, [[W7.wed, '10:00'], [W7.thu, '10:00']]) });
+  });
+
+  it('asks before placing a paired group with another teacher', async () => {
+    const e = await expectCode(
+      db.call('oh_admin_assign', { p_token: admin, p_week: w7, p_group: ids.g1, p_teacher: ids.joseph, p_d: W7.wed, p_t: '10:00' }),
+      'NEEDS_FORCE',
+    );
+    expect((e as DbError).detail).toBe('OTHER_TEACHER');
+    const a = await db.call('oh_admin_assign', { p_token: admin, p_week: w7, p_group: ids.g1, p_teacher: ids.prolong, p_d: W7.wed, p_t: '10:00' });
+    expect(a.teacher_id).toBe(ids.prolong);
+    await db.call('oh_admin_remove', { p_token: admin, p_id: a.id });
+  });
+
+  it('can unpair a group again', async () => {
+    await db.call('oh_admin_save', { p_token: admin, p_kind: 'group', p: { id: ids.g1, teacher_id: null } });
+    expect((await db.call('oh_student_state', { p_token: g1 })).slots).toHaveLength(24);
+  });
+});
+
 describe('name login', () => {
   let db: TestDb;
   let admin: string;

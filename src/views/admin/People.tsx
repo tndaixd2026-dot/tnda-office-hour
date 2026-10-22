@@ -104,7 +104,7 @@ export function GroupsPage() {
           <p class="eyebrow">小組與邀請</p>
           <h1 class="title-l">{cfg.groups.length} 個小組</h1>
           <p class="muted small" style={{ maxWidth: '560px' }}>
-            在每組的「學生名單」填上同學的名字，同學到首頁輸入自己的名字就能登入；也可以把邀請連結貼到各組的 Discord，點開、輸入名字加入。整組共用同一份預約
+            在每組的「學生名單」填上同學的名字，同學到首頁輸入自己的名字就能登入；也可以把邀請連結貼到各組的 Discord，點開、輸入名字加入。整組共用同一份預約。每組可以搭配一位老師，隨時都能改
           </p>
         </div>
         <div class="row wrap">
@@ -118,17 +118,30 @@ export function GroupsPage() {
       </div>
       <div class="group-grid">
         {cfg.groups.map((g) => (
-          <GroupCard key={g.id} g={g} now={now} save={save} reload={reload} />
+          <GroupCard key={g.id} g={g} teachers={cfg.teachers.filter((t) => !t.team && (t.active || t.id === g.teacher_id))} now={now} save={save} reload={reload} />
         ))}
       </div>
     </main>
   );
 }
 
-function GroupCard({ g, now, save, reload }: { g: ConfigGroup; now: number; save: (p: Record<string, unknown>, ok?: string) => Promise<unknown>; reload: () => void }) {
+function GroupCard({
+  g,
+  teachers,
+  now,
+  save,
+  reload,
+}: {
+  g: ConfigGroup;
+  teachers: ConfigTeacher[];
+  now: number;
+  save: (p: Record<string, unknown>, ok?: string) => Promise<unknown>;
+  reload: () => void;
+}) {
   const { call } = useApi();
   const { busy, run } = useBusy();
   const link = inviteLink(g.code);
+  const pair = teachers.find((t) => t.id === g.teacher_id);
 
   const editRoster = async () => {
     let text = g.roster.join('\n');
@@ -219,6 +232,25 @@ function GroupCard({ g, now, save, reload }: { g: ConfigGroup; now: number; save
           )}
         </Menu>
       </div>
+      <Field label="搭配老師" help={pair ? `只會排到 ${pair.name} 的時段，學生也只看得到這些時段` : '不指定時，所有老師的時段都可以排'}>
+        <select
+          class="select"
+          value={String(g.teacher_id ?? '')}
+          onChange={(e) => {
+            const v = (e.target as HTMLSelectElement).value;
+            const t = teachers.find((x) => String(x.id) === v);
+            save({ id: g.id, teacher_id: t ? t.id : null }, t ? `第 ${g.no} 組改成搭配 ${t.name}` : `第 ${g.no} 組改成不指定老師`);
+          }}
+        >
+          <option value="">不指定</option>
+          {teachers.map((t) => (
+            <option key={t.id} value={String(t.id)}>
+              {t.name}
+              {t.active ? '' : '（停用中）'}
+            </option>
+          ))}
+        </select>
+      </Field>
       <div class="card sunk tight stack tight">
         <span class="eyebrow">邀請代碼</span>
         <span class="mono" style={{ fontSize: '19px', letterSpacing: '0.12em', fontWeight: 500 }}>

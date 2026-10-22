@@ -212,6 +212,13 @@ try {
     await page.getByText(/「陳柏宇」已經在其他組/).waitFor();
     check((await d.getByLabel('學生名單').inputValue()).includes('陳柏宇'), 'roster text should be kept after an error');
     await d.getByRole('button', { name: '取消' }).click();
+    // pair a group with one teacher, then undo it
+    const card5 = page.locator('.card', { has: page.getByRole('button', { name: '第 5 組選單' }) });
+    await card5.getByLabel('搭配老師').selectOption({ label: 'Tim' });
+    await page.getByText('第 5 組改成搭配 Tim').waitFor();
+    await card5.getByText('只會排到 Tim 的時段').waitFor();
+    await card5.getByLabel('搭配老師').selectOption({ label: '不指定' });
+    await page.getByText('第 5 組改成不指定老師').waitFor();
     await page.getByRole('complementary', { name: '管理選單' }).getByRole('link', { name: '設定' }).click();
     await page.getByRole('heading', { name: '課程與規則' }).first().waitFor();
   });

@@ -110,6 +110,8 @@ export interface StudentState {
   clock: ClockInfo;
   settings: Settings;
   me: SessionInfo;
+  /** the group's teacher, when teacher names are shown to students */
+  pair: string | null;
   members: string[];
   week_id: number | null;
   weeks: StudentWeek[];
@@ -199,6 +201,8 @@ export interface AdminGroup {
   done: number;
   total: number;
   recent_teachers: number[];
+  /** the one teacher this group meets, if paired */
+  teacher_id: number | null;
 }
 
 export interface Teacher {
@@ -243,6 +247,8 @@ export interface ConfigGroup {
   members: Array<{ id: number; name: string; created_at: string; seen_at: string }>;
   roster: string[];
   used: boolean;
+  /** the one teacher this group meets, if paired */
+  teacher_id: number | null;
 }
 
 export interface ConfigTeacher {

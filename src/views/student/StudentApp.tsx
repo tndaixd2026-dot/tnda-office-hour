@@ -465,6 +465,12 @@ function Home({ st, setWeek, reload }: { st: StudentState; setWeek: (id: number)
               <Place value={st.settings.location} />
             </dd>
           </div>
+          {st.pair && (
+            <div>
+              <dt>搭配老師</dt>
+              <dd>{st.pair}</dd>
+            </div>
+          )}
           <div>
             <dt>錄影</dt>
             <dd>{RECORDING_NOTE}</dd>

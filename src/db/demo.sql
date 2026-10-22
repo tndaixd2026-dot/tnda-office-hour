@@ -141,6 +141,12 @@ update app.requests r set questions = v.q
   ) as v (t, q)
  where r.topic = v.t;
 
+-- a few groups meet one PM each; the demo student's group (2) meets anyone
+update app.groups g set teacher_id = t.id
+  from (values (1, 'Joseph'), (3, 'Tim'), (4, 'Prolong')) as v (no, name)
+  join app.teachers t on t.name = v.name
+ where g.no = v.no;
+
 drop function app._demo_request(int, int, text, text, text, text, int, text[], interval);
 drop function app._demo_appt(int, int, text, int, text, text);
 
