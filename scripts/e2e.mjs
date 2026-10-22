@@ -69,6 +69,10 @@ try {
     check(await page.getByRole('button', { name: '試玩預約流程' }).isVisible(), 'demo button missing');
     await page.getByRole('heading', { name: '學生怎麼預約' }).waitFor();
     check(await page.getByRole('link', { name: '查看 TD 專班課表' }).isVisible(), 'TD timetable link missing');
+    // the timetable leads back to the sign-in page
+    await page.getByRole('link', { name: '查看 TD 專班課表' }).click();
+    await page.getByRole('link', { name: '回到首頁' }).click();
+    await page.getByRole('heading', { name: '輸入你的名字' }).waitFor();
     // invite codes are one tap away, and back
     await page.getByRole('button', { name: '我有邀請代碼' }).click();
     await page.getByRole('heading', { name: '輸入邀請代碼' }).waitFor();
@@ -91,6 +95,11 @@ try {
   });
 
   await run('student books a week', async () => {
+    // drafts typed on this device by an older form must not break the page
+    await page.evaluate(() => {
+      for (let g = 1; g <= 10; g++)
+        for (let w = 1; w <= 40; w++) localStorage.setItem(`oh.draft.${g}.${w}`, JSON.stringify({ picks: [], want: 2, topic: '舊草稿', base: null }));
+    });
     // the first week that still says 可預約
     const open = page.locator('.weeks .wk', { hasText: '可預約' }).first();
     await open.click();

@@ -3,6 +3,7 @@ import { ApiError } from '../../api/engine';
 import type { Request, StudentState } from '../../api/types';
 import { clock, useApi, useBusy } from '../../app/hooks';
 import { go } from '../../app/router';
+import { useApp } from '../../app/session';
 import { local } from '../../app/store';
 import { minutesText, slotLines } from '../../lib/format';
 import { addDays, agoText, mdPad } from '../../lib/time';
@@ -37,17 +38,37 @@ function fromRequest(r: Request | null): Draft {
   };
 }
 
+/** A draft left on this device, filled out to the current form: drafts
+ *  typed before a field existed must not break the page. */
+function savedDraft(key: string, cap: number): Draft | null {
+  const x = local.get<Partial<Draft>>(key);
+  if (!x || typeof x !== 'object') return null;
+  const text = (v: unknown) => (typeof v === 'string' ? v : '');
+  return {
+    picks: Array.isArray(x.picks) ? x.picks.filter((k): k is string => typeof k === 'string') : [],
+    want: Number.isInteger(x.want) ? Math.min(Math.max(x.want!, 1), cap) : 1,
+    topic: text(x.topic),
+    questions: text(x.questions),
+    progress: text(x.progress),
+    link: text(x.link),
+    base: Number.isInteger(x.base) ? x.base! : null,
+  };
+}
+
 export function Book({ st, weekId, reload }: { st: StudentState; weekId: number; reload: () => void }) {
   const { call } = useApi();
+  const { demo } = useApp();
   const { busy, run } = useBusy(st.settings);
   const week = st.weeks.find((w) => w.id === weekId)!;
   const server = st.request;
-  const draftKey = `oh.draft.${st.me.group?.id}.${weekId}`;
+  // the demo lives only in this tab, so its drafts are not kept (and never
+  // mix with a real group's draft for the same group and week ids)
+  const draftKey = demo ? null : `oh.draft.${st.me.group?.id}.${weekId}`;
 
   // snap = the server version this edit started from
   const [snap, setSnap] = useState<Draft>(() => fromRequest(server));
   const [d, setD] = useState<Draft>(() => {
-    const saved = local.get<Draft>(draftKey);
+    const saved = draftKey ? savedDraft(draftKey, st.settings.week_cap) : null;
     // a draft left on this device only wins if it was based on the version we still see
     if (saved && saved.base === (server?.version ?? null)) return saved;
     return fromRequest(server);
@@ -57,6 +78,7 @@ export function Book({ st, weekId, reload }: { st: StudentState; weekId: number;
 
   const dirty = useMemo(() => JSON.stringify(d) !== JSON.stringify(snap), [d, snap]);
   useEffect(() => {
+    if (!draftKey) return;
     if (dirty) local.set(draftKey, d);
     else local.remove(draftKey);
   }, [d, dirty]);
@@ -124,7 +146,7 @@ export function Book({ st, weekId, reload }: { st: StudentState; weekId: number;
       },
     );
     if (r) {
-      local.remove(draftKey);
+      if (draftKey) local.remove(draftKey);
       toast(server?.status === 'open' ? '需求已更新，組員會即時看到' : '已送出！助教排好時間後，首頁會即時更新', { ms: 5000 });
       go('');
       reload();
