@@ -20,6 +20,7 @@
   --accent-text: #b23a0b;
   --accent-soft: #fdeee4;
   --accent-ink: #ffffff;
+  --accent-fill: #b23a0b; /* accent behind text: --accent-ink on --accent is only 3.56:1 */
 
   --ok: #126b31;
   --ok-soft: #e4f2e8;
@@ -88,6 +89,7 @@
     --accent-text: #ff8f5c;
     --accent-soft: #3a2014;
     --accent-ink: #1b0d05;
+    --accent-fill: #ff7a3d;
     --ok: #5fc98a;
     --ok-soft: #15291d;
     --warn: #f0b45a;
@@ -128,6 +130,7 @@
   --accent-text: #ff8f5c;
   --accent-soft: #3a2014;
   --accent-ink: #1b0d05;
+  --accent-fill: #ff7a3d;
   --ok: #5fc98a;
   --ok-soft: #15291d;
   --warn: #f0b45a;
@@ -604,8 +607,8 @@ p {
   box-shadow: 0 6px 18px rgb(22 21 20 / 0.18);
 }
 .btn.accent {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--accent-fill);
+  border-color: var(--accent-fill);
   color: var(--accent-ink);
 }
 .btn.ghost {
@@ -1169,8 +1172,7 @@ a.place {
 }
 .cell.late.mine {
   background: var(--accent-soft);
-  background: color-mix(in srgb, var(--accent) 35%, var(--surface));
-  color: var(--accent-ink);
+  color: var(--accent-text);
   border-color: transparent;
 }
 button.cell {
@@ -1184,7 +1186,7 @@ button.cell:hover {
   border-color: var(--ink);
 }
 button.cell[aria-pressed='true'] {
-  background: var(--accent);
+  background: var(--accent); /* only the check mark sits on it, which needs 3:1; text would need --accent-fill */
   border-color: var(--accent);
   color: var(--accent-ink);
   box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 35%, transparent);
@@ -1360,7 +1362,7 @@ button.cell[aria-pressed='true'] .cap {
   height: 28px;
   padding: 0 12px;
   border-radius: 99px;
-  background: var(--accent);
+  background: var(--accent-fill);
   color: var(--accent-ink);
   font-weight: 700;
   font-size: 13px;
@@ -1953,7 +1955,7 @@ ul.steps {
   margin-left: auto;
   font-family: var(--mono);
   font-size: 11.5px;
-  background: var(--accent);
+  background: var(--accent-fill);
   color: var(--accent-ink);
   border-radius: 99px;
   padding: 0 7px;
