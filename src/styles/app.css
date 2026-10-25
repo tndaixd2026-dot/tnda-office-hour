@@ -1855,6 +1855,10 @@ ul.steps {
 .welcome-art .eyebrow {
   color: rgb(245 244 240 / 0.6);
 }
+/* the name's first line, 叁式 ULTRACOMBOS, stays on one line on a desktop */
+.welcome-art .title-xl {
+  font-size: clamp(32px, 4vw, 48px);
+}
 .welcome-art .lede {
   max-width: 420px;
   color: rgb(245 244 240 / 0.74);
