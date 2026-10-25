@@ -107,7 +107,7 @@ function TeacherHome({ st }: { st: TeacherState }) {
               minutes: mins,
               tz,
               title: `Office Hour · ${team ? `${s.teacher} · ` : ''}第 ${s.group.no} 組${s.request?.topic ? `｜${s.request.topic}` : ''}`,
-              location: st.settings.location,
+              location: s.room ?? st.settings.location,
               description: [s.request?.questions && `想問的問題：\n${s.request.questions}`, s.request?.progress, s.request?.link]
                 .filter(Boolean)
                 .join('\n\n'),
@@ -155,7 +155,7 @@ function TeacherHome({ st }: { st: TeacherState }) {
           <div class="meta">
             <span>
               <Icon name="pin" size={16} />
-              <Place value={st.settings.location} />
+              <Place value={next.room ?? st.settings.location} />
             </span>
             <span>
               <Icon name="video" size={16} />

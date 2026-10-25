@@ -1,8 +1,8 @@
 # Office Hour 預約平台：給 Claude 的工作說明
 
-TN0006「跨域數位製作實務」的 Office Hour 預約平台，名稱是「叁式 一天 30 分鐘 一週三次」（`src/config.ts` 的 `APP_NAME` 和手機用的 `APP_SHORT_NAME`，另外寫在 `index.html`、`public/manifest.webmanifest`、`scripts/send-mail.mjs` 的寄件人名稱，以及信件頁首的 `app.mail_message`／`app.mail_remind`，改名時要新增 migration）。規則是每組每週最多 3 次、每次 30 分鐘、一天一次（設定裡的每週上限 3 格、每天上限 1 格）。學生以小組為單位勾選可以的時段，所有畫面即時同步。使用說明、架構圖、展示腳本在 `README.md`。
+TN0006「跨域數位製作實務」的 Office Hour 預約平台，名稱是「叁式 ULTRACOMBOS One Hour a Week」（`src/config.ts` 的 `APP_NAME` 和手機用的 `APP_SHORT_NAME`，另外寫在 `index.html`、`public/manifest.webmanifest`、`scripts/send-mail.mjs` 的寄件人名稱，以及信件頁首的 `app.mail_message`／`app.mail_remind`，改名時要新增 migration）。規則是每組有一個固定時段（業師、星期、時間，每次 60 分鐘），每週決定要不要用：送出就排定（設定裡 `slot_minutes` 60、每週上限 1、每天上限 1）。所有畫面即時同步。使用說明、架構圖、展示腳本在 `README.md`。
 
-每週的節奏：下一週的需求在**前一週的週日 12:00** 截止（設定的 `close_dow`／`close_time`，`app.week_deadline()`；截止後學生不能修改或撤回，`WEEK_LATE`），**週日 12:00** 寄審核提醒到助教信箱（`app.mail_remind`），助教週日 12:00–18:00 排程並發布，**週日 18:00** 寄預覽到助教信箱，**週一 08:00** 寄信給收件人。舊的 `lead_days` 欄位已經不用了。
+每週的節奏：每次只開放下一週（`app.booking_week()`）；各組在**前一週的週六 20:00** 前按「預約這週」（`oh_booking_save`，題目、想問的問題、進度、雲端連結都必填，直接建立已確認的場次）或「這週不約」（`oh_booking_skip`，`requests.status = 'skipped'`）。截止（設定的 `close_dow`／`close_time`，`app.week_deadline()`）後不能再改（`WEEK_LATE`），已排定的場次在開始前 `cancel_hours` 小時可以自己取消。固定時段那天是全天休息日（`app.fixed_holiday()`）就停一次（`WEEK_HOLIDAY`）。業師臨時有事時，助教在排程頁「代班」「改期」「取消」（`oh_admin_move`、`oh_admin_remove`）；學生之後修改內容不會蓋掉助教的調整。**週日 18:00** 寄預覽到助教信箱，**週一 08:00** 寄信給收件人。週日 12:00 的審核提醒（`app.mail_remind`）已經停用，`lead_days` 也不用了。
 
 老師端是同一個畫面：三位老師（Joseph、Prolong、Tim）和共用帳號「叁式」（`app.teachers.team = true`，給業師公司或老師助理）登入後都看到三位老師的全部場次。共用帳號不會被排進任何場次、不能有開放時段（`app.not_team()` trigger），行事曆包含所有老師的場次。
 
@@ -33,8 +33,9 @@ TN0006「跨域數位製作實務」的 Office Hour 預約平台，名稱是「�
 
 - 前端：Vite + Preact 11 + TypeScript，hash 路由，`base: './'`，所以換帳號或改 repo 名稱都不影響網站運作。部署在 GitHub Pages；邀請連結從 `location` 組出來。
 - 後端：Supabase（Postgres 17）。資料表都放在私有的 `app` schema（RLS 開啟、沒有 policy、沒有 grant）。瀏覽器**只能**呼叫 `public.oh_*`（SECURITY DEFINER、`set search_path = ''`）。登入方式是用代碼或名字換 session token，資料庫只存 token 的 SHA-256。名字登入（`oh_login`）：學生比對 `app.roster`（助教在「小組與邀請」維護的學生名單），老師比對 `app.teachers.name`，助教比對 `app.admins.name`（只限 `name_login` 為 true 的帳號），比較鍵是 `app.name_key()`（NFKC、小寫、去空白）。名為「助教」的原始帳號 `name_login = false`，只能用代碼登入，是備用帳號，`.secrets/admin-code.txt` 就是它的代碼。這是使用者明確選擇的便利性取捨（知道名字就能登入），不要擅自改回代碼制。
-- 會議地點與時段容量：所有場次都在設定「地點」裡的同一個 Google Meet 會議室（網址會顯示成連結，`Place` 元件）。所以**同一時段只排一組**，不管幾位老師開放：排程器 `autoSchedule` 的 `perSlot` 預設 1、`app.assign` 對已有別組的時段回報軟性問題 `SLOT_TAKEN`、`oh_student_state` 的 `full` 讓學生看到「已排滿」。要改回多會議室時，這三處要一起改。
-- 小組搭配老師：每組最多兩位，存在 `app.group_teachers`（沒有資料代表不指定，`cap` trigger 擋第三位），助教在「小組與邀請」的「搭配老師」勾選、隨時更改（`oh_admin_save` 的 `group`，`teacher_ids` 陣列；舊頁面送的單一 `teacher_id` 也收）。搭配後，這組的時段只算這幾位老師的（`app.group_slots()`，學生畫面、`oh_request_save` 的檢查、`app.week_bookable(週, 組)` 都用它），閃身步排程法只排給搭配的老師，助教手動排給其他老師是軟性問題 `OTHER_TEACHER`。共用帳號不能被搭配（`app.not_team()` trigger）。學生只有在設定開啟「顯示老師名字」時才看得到搭配的老師（`oh_student_state` 的 `pair`，如「Prolong、Tim」）。
+- 固定時段：`app.groups.teacher_id`／`slot_dow`／`slot_time`（三個都有或都沒有，`oh_admin_save` 的 `group` 檢查；時間要整點），助教在「小組與邀請」每組卡片的「固定時段」設定。共用帳號不能當固定業師（`app.not_team()` trigger）。學生畫面的 `oh_student_state.fixed`、每週的 `status`／`bookable`／`holiday`。
+- 討論室：每位業師一間 Google Meet（`app.teachers.room`，老師頁「設定討論室」），`app.room_of()` 沒有設定時退回設定的「地點」。學生、老師畫面、行事曆（`oh_calendar`）、每週的信（`app.mail_message`）和 Discord 通知都用場次業師的討論室，所以同一時段可以有好幾組，`app.assign` 不再檢查 `SLOT_TAKEN`／`NOT_REQUESTED`。
+- 舊制還留在資料庫裡但畫面不用了：勾選時段的 `oh_request_save`／`oh_request_withdraw`、閃身步排程法（`src/lib/scheduler.ts`、`oh_admin_apply`）。舊制的測試用 `makeDb({ legacy: true })` 跑在舊設定上。
 - 即時同步：資料表的 statement trigger 呼叫 `app.ping()`，送到私有 Realtime 頻道 `oh-sync`（RLS 只允許收聽）。前端收到後重抓資料（節流 1.5 秒），另外在視窗取得焦點、恢復連線時，以及每 60 秒也會重抓。
 - 示範模式（`#/demo`）：在瀏覽器裡用 PGlite 跑**同一套** migration，再載入 `src/db/demo.sql`（日期以今天為基準）。
 - Discord：用 pg_net 非同步送出，並設 `allowed_mentions: {parse: []}`，學生寫的 @everyone 不會真的標記所有人。
@@ -43,13 +44,13 @@ TN0006「跨域數位製作實務」的 Office Hour 預約平台，名稱是「�
 
 | 位置 | 內容 |
 |---|---|
-| `supabase/migrations/` | 資料表、API 函式、Discord、登入期限、私有即時頻道、行事曆、名字登入與學生名單、TD 課表、單元與類型比例、老師共用畫面、每週截止、每週寄信、小組搭配老師 |
+| `supabase/migrations/` | 資料表、API 函式、Discord、登入期限、私有即時頻道、行事曆、名字登入與學生名單、TD 課表、單元與類型比例、老師共用畫面、每週截止、每週寄信、固定時段與業師討論室 |
 | `supabase/seed.sql` | 課程初始資料 |
 | `src/db/sql.ts` | 示範模式的 bootstrap 和 `MIGRATIONS` 清單 |
 | `src/api/` | `cloud.ts`（Supabase）和 `demo.ts`（PGlite）實作同一個 `Engine` 介面 |
 | `src/app/` | 登入狀態、hooks（`useLive` 負責即時重抓）、路由 |
 | `src/views/` | `student/`、`teacher/`、`admin/`（含 `LessonsAdmin.tsx`）、`lessons/`（TD 課表公開頁）、`Welcome.tsx` |
-| `src/lib/` | 時間計算、閃身步排程法（最大流）、ICS／CSV 匯出、TD 課表分組（`lessons.ts`） |
+| `src/lib/` | 時間計算、閃身步排程法（舊制，最大流）、ICS／CSV 匯出、TD 課表分組（`lessons.ts`） |
 | `src/ui/`、`src/styles/app.css` | 元件、對話框、圖示、toast、樣式 |
 | `tests/` | Vitest；資料庫規則用 PGlite 執行真正的 SQL |
 | `scripts/` | E2E、axe 掃描、雲端檢查、本機重置、學期重置、每週寄信（`send-mail.mjs`） |

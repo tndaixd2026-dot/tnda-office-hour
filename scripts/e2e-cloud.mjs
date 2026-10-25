@@ -55,54 +55,44 @@ try {
     await join(admin, adminCode);
     await a.getByText('每週預約').waitFor();
     await b.getByText('每週預約').waitFor();
-    await admin.getByRole('heading', { name: /需求/ }).first().waitFor();
+    await admin.locator('.stat-pills').waitFor();
   });
 
   let weekLabel = '';
-  await run('A submits a request; B sees it appear', async () => {
+  await run('A books the week; B sees it appear', async () => {
     const wk = a.locator('.weeks .wk', { hasText: '可預約' }).first();
     weekLabel = (await wk.locator('.w').textContent()) ?? '';
     await wk.click();
-    await a.getByRole('button', { name: /開始預約|重新送出需求/ }).click();
-    const cells = a.locator('button.cell[aria-pressed="false"]');
-    await cells.nth(0).click();
-    await cells.nth(2).click();
+    await a.getByRole('button', { name: /預約這週|改成預約/ }).first().click();
     await a.getByLabel('想討論的題目').fill(`甲的題目-${RUN}`);
     await a.getByLabel('想問 PM 的問題').fill('甲想問的問題');
     await a.getByLabel('目前進度').fill('甲寫的進度');
-    await a.getByRole('button', { name: '送出預約需求' }).click();
-    await a.getByText(`甲的題目-${RUN}`).waitFor();
+    await a.getByLabel('雲端資料夾連結').fill('https://drive.google.com/drive/folders/e2e-cloud');
+    await a.getByRole('button', { name: '預約這週' }).click();
+    await a.getByText(`甲的題目-${RUN}`).first().waitFor();
     await b.locator('.weeks .wk', { hasText: weekLabel }).first().click();
-    await b.getByText(`甲的題目-${RUN}`).waitFor({ timeout: 10000 });
+    await b.getByText(`甲的題目-${RUN}`).first().waitFor({ timeout: 10000 });
   });
 
   await run('B edits while A edits; the conflict is caught', async () => {
-    await a.getByRole('button', { name: '修改需求' }).click();
-    await b.getByRole('button', { name: '修改需求' }).click();
+    await a.getByRole('button', { name: '修改內容' }).click();
+    await b.getByRole('button', { name: '修改內容' }).click();
     await a.getByLabel('想討論的題目').fill(`甲改過的題目-${RUN}`);
     await b.getByLabel('想討論的題目').fill(`乙改過的題目-${RUN}`);
-    await a.getByRole('button', { name: '更新需求' }).click();
-    await a.getByText(`甲改過的題目-${RUN}`).waitFor();
+    await a.getByRole('button', { name: '更新內容' }).click();
+    await a.getByText(`甲改過的題目-${RUN}`).first().waitFor();
     // B is now editing an outdated version: a banner appears, saving asks what to do
-    await b.getByText(/剛剛更新了這份需求/).waitFor({ timeout: 10000 });
-    await b.getByRole('button', { name: '更新需求' }).click();
-    await b.getByRole('dialog', { name: '組員剛剛也改了這份需求' }).waitFor();
-    await b.getByRole('button', { name: '用我的版本覆蓋' }).click();
-    await b.getByText(`乙改過的題目-${RUN}`).waitFor();
-    await a.getByText(`乙改過的題目-${RUN}`).waitFor({ timeout: 10000 });
+    await b.getByText(/剛剛更新了這週的預約/).waitFor({ timeout: 10000 });
+    await b.getByRole('button', { name: '更新內容' }).click();
+    await b.getByRole('dialog', { name: '組員剛剛也改了這週的預約' }).waitFor();
+    await b.getByRole('button', { name: '用我的版本' }).click();
+    await b.getByText(`乙改過的題目-${RUN}`).first().waitFor();
+    await a.getByText(`乙改過的題目-${RUN}`).first().waitFor({ timeout: 10000 });
   });
 
-  await run('admin sees the request live and schedules it', async () => {
+  await run('the admin and both teammates see the session without reloading', async () => {
     await admin.locator('.weeks .wk', { hasText: weekLabel }).first().click();
-    await admin.getByText(`乙改過的題目-${RUN}`).waitFor({ timeout: 10000 });
-    await admin.getByRole('button', { name: '閃身步排程法' }).click();
-    await admin.getByRole('button', { name: '直接發布' }).click();
-    await admin.getByRole('dialog', { name: /已發布/ }).waitFor();
-    await admin.getByRole('button', { name: '完成', exact: true }).click();
-  });
-
-  await run('both teammates get the time without reloading', async () => {
-    await a.getByText(/時間確定了/).waitFor({ timeout: 10000 });
+    await admin.getByText(`乙改過的題目-${RUN}`).first().waitFor({ timeout: 10000 });
     await b.locator('.hero').getByText('下一次 Office Hour').waitFor({ timeout: 10000 });
   });
 

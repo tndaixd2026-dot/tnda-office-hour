@@ -15,7 +15,7 @@ describe('weekly email', () => {
     (await db.one(`select app.mail_outbox($1, null, $2, $3, $4, $5, $6) as v`, [kind, SITE, API, KEY, extra.fallback ?? 'sender@example.com', extra.force ?? false])).v;
 
   beforeAll(async () => {
-    db = await makeDb();
+    db = await makeDb({ legacy: true });
     await db.setNow('2026-10-14T09:00:00+08:00');
     const c = await db.codes();
     codes = c;
@@ -167,8 +167,8 @@ describe('weekly email', () => {
   it('shows admins exactly what goes out, sent or not', async () => {
     const p = await db.call('oh_admin_mail_preview', { p_token: admin, p_week: '2026-10-21', p_site: SITE, p_api: API, p_key: KEY });
     expect(p.week).toBe('2026-10-19');
+    // the Sunday-noon reminder is gone with fixed slots: nothing is left to schedule
     expect(p.messages.map((m: any) => [m.kind, m.to, Boolean(m.sent_at)])).toEqual([
-      ['remind', '（寄件的 Gmail）', false],
       ['preview', '（寄件的 Gmail）', false],
       ['weekly', 'office@example.com', true],
       ['weekly', 'prolong@example.com', true],

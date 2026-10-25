@@ -3,15 +3,17 @@ import type { Settings } from '../api/types';
 
 const FIELD: Record<string, string> = {
   topic: '題目需為 1–80 字',
+  questions: '想問 PM 的問題需為 1–1000 字',
   progress: '進度說明需為 1–1000 字',
   link: '連結格式不對，請貼完整網址（https:// 開頭）',
   want: '想約的時間超出每週上限',
   slots: '請至少勾選一個時段',
   name: '請輸入名字',
-  block: '時段需以 30 分鐘為單位，且結束要晚於開始',
+  block: '時段需以整點為單位，且結束要晚於開始',
+  slot: '固定時段要選好老師、星期和整點時間，或三個都清空',
   settings: '有設定值超出允許範圍',
   group: '小組資料不正確（編號 1–999、Discord Webhook 需為官方網址）',
-  teacher: '請輸入老師名字',
+  teacher: '請輸入老師名字，討論室要貼 https:// 開頭的完整網址',
   admin: '請輸入助教名字',
   week: '週次的開始日必須是星期一',
   weeks: '週數需在 1–52 之間',
@@ -39,7 +41,10 @@ const MESSAGES: Record<string, string> = {
   NAME_AMBIGUOUS: '有人和你同名，請改用邀請連結登入',
   SLOT_INVALID: '有時段已經不開放，請重新選擇',
   WEEK_CLOSED: '這週已暫停預約',
-  CONFLICT: '組員剛剛更新了需求',
+  CONFLICT: '組員剛剛更新了預約',
+  NO_FIXED_SLOT: '助教還沒設定你們的固定時段，請在 Discord 問助教',
+  WEEK_NOT_YET: '這週還沒開放，上一週截止後才能預約',
+  SLOT_TAKEN: '這個時段已經有別的場次，請在 Discord 告訴助教',
   HAS_APPOINTMENTS: '這週已經有排定的時段，請先取消時段再撤回需求',
   TEACHER_BUSY: '這位老師在這個時段已經有安排了',
   GROUP_BUSY: '這組在這個時段已經有安排了',
@@ -57,8 +62,6 @@ export const ISSUE: Record<string, string> = {
   CAP_DAY: '超過這組的每日上限',
   NOT_REQUESTED: '這組沒有勾選這個時段',
   PAST: '這個時間已經過了',
-  SLOT_TAKEN: '這個時段已經排了別組（只有一個會議室）',
-  OTHER_TEACHER: '這組搭配的是另一位老師',
 };
 
 export function errorText(e: unknown, s?: Pick<Settings, 'cancel_hours'>): string {
@@ -80,6 +83,8 @@ export function errorText(e: unknown, s?: Pick<Settings, 'cancel_hours'>): strin
       return '找不到這筆資料，可能已經被刪除或修改了';
     case 'SLOT_LATE':
       return '有時段已過預約截止';
+    case 'WEEK_HOLIDAY':
+      return `這週的固定時段遇到${e.detail}，停一次`;
     case 'WEEK_LATE':
       return `這週的預約已在 ${e.detail} 截止，要調整請在 Discord 告訴助教`;
     case 'CANCEL_LATE':

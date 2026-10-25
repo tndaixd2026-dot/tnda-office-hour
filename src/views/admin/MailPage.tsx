@@ -52,8 +52,7 @@ export function MailPage() {
         <p class="eyebrow">寄信通知</p>
         <h1 class="title-l">每週寄給老師的信</h1>
         <p class="muted small" style={{ maxWidth: '640px' }}>
-          {MAIL_SEND} 會自動把這週的場次寄給下面的收件人，每一場都有「加到 Google 日曆」按鈕，也可以一鍵訂閱全部場次。助教信箱會先收到兩封：
-          {MAIL_REMIND} 需求截止時的審核提醒，和 {MAIL_PREVIEW} 的預覽
+          {MAIL_SEND} 會自動把這週的場次寄給下面的收件人，每一場都有「加到 Google 日曆」按鈕和業師的討論室，也可以一鍵訂閱全部場次。助教信箱會先在 {MAIL_PREVIEW} 收到預覽
         </p>
       </div>
 
@@ -61,7 +60,6 @@ export function MailPage() {
         <h2 class="title-s" id="m-settings">
           寄送設定
         </h2>
-        <Switch checked={st.settings.remind} onChange={(v) => setting({ remind: v }, v ? `${MAIL_REMIND} 會寄提醒` : '已關閉提醒')} label={`${MAIL_REMIND} 寄審核提醒到助教信箱`} />
         <Switch checked={st.settings.preview} onChange={(v) => setting({ preview: v }, v ? `${MAIL_PREVIEW} 會先寄預覽` : '已關閉預覽')} label={`${MAIL_PREVIEW} 先寄預覽到助教信箱`} />
         <Switch checked={st.settings.weekly} onChange={(v) => setting({ weekly: v }, v ? `${MAIL_SEND} 會寄出` : '已暫停週一的信')} label={`${MAIL_SEND} 寄給收件人`} />
         <form

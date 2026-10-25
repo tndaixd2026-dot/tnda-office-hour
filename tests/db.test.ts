@@ -135,7 +135,7 @@ describe('student requests', () => {
   let b1: string; // group 1, member B
   let c2: string; // group 2
   beforeAll(async () => {
-    db = await makeDb();
+    db = await makeDb({ legacy: true });
     await db.sql('update app.settings set week_cap = 2'); // these cases are written around a two-slot weekly cap
     await db.setNow(WED);
     const { groups } = await db.codes();
@@ -155,7 +155,7 @@ describe('student requests', () => {
     expect(wed10).toMatchObject({ cap: 1, late: false, full: false, demand: 0 }); // two PMs, one meeting room
     expect(st.request).toBeNull();
     expect(st.weeks).toHaveLength(13);
-    expect(st.weeks[0]).toMatchObject({ label: 'W7', bookable: true, requested: false, booked: 0 });
+    expect(st.weeks[0]).toMatchObject({ label: 'W7', requested: false, booked: 0 });
   });
 
   it('validates every field', async () => {
@@ -284,7 +284,7 @@ describe('scheduling', () => {
   let ids: { joseph: number; prolong: number; tim: number; g1: number; g2: number; g3: number };
 
   beforeAll(async () => {
-    db = await makeDb();
+    db = await makeDb({ legacy: true });
     await db.sql('update app.settings set week_cap = 2'); // these cases are written around a two-slot weekly cap
     await db.setNow(WED);
     const c = await db.codes();
@@ -331,7 +331,8 @@ describe('scheduling', () => {
     st = await db.call('oh_student_state', { p_token: g1 });
     expect(st.scheduling).toBe(false);
     expect(st.appointments).toHaveLength(1);
-    expect(st.appointments[0]).toMatchObject({ d: W7.wed, t: '10:00', status: 'confirmed', teacher: null, can_cancel: true, topic: '感測器延遲' });
+    // before its week closes a group skips the week instead of cancelling
+    expect(st.appointments[0]).toMatchObject({ d: W7.wed, t: '10:00', status: 'confirmed', teacher: null, can_cancel: false, topic: '感測器延遲' });
     expect(st.weeks[0].booked).toBe(1);
     // every teacher sees every PM's sessions, their own marked
     t = await db.call('oh_teacher_state', { p_token: joseph });
@@ -350,19 +351,11 @@ describe('scheduling', () => {
     );
   });
 
-  it('keeps one group per time slot (one meeting room)', async () => {
-    // group 1 has Wednesday 10:00 with Prolong; Joseph is free then, but the room is not
-    const e = await expectCode(
-      db.call('oh_admin_assign', { p_token: admin, p_week: w7, p_group: ids.g2, p_teacher: ids.joseph, p_d: W7.wed, p_t: '10:00' }),
-      'NEEDS_FORCE',
-    );
-    expect((e as DbError).detail).toBe('SLOT_TAKEN');
-    const other = await db.call('oh_student_state', { p_token: g2, p_week: w7 });
-    const wed = other.slots.find((x: any) => x.d === W7.wed && x.t === '10:00');
-    expect(wed).toMatchObject({ cap: 1, full: true });
-    expect(other.slots.find((x: any) => x.d === W7.wed && x.t === '10:30').full).toBe(false);
-    const mine = await db.call('oh_student_state', { p_token: g1, p_week: w7 });
-    expect(mine.slots.find((x: any) => x.d === W7.wed && x.t === '10:00').full).toBe(false);
+  it('lets two PMs meet two groups at once, each in their own room', async () => {
+    // group 1 has Wednesday 10:00 with Prolong; Joseph is free then
+    const a = await db.call('oh_admin_assign', { p_token: admin, p_week: w7, p_group: ids.g2, p_teacher: ids.joseph, p_d: W7.wed, p_t: '10:00' });
+    expect(a.status).toBe('draft');
+    await db.call('oh_admin_remove', { p_token: admin, p_id: a.id });
   });
 
   it('asks for confirmation before breaking the rules', async () => {
@@ -371,7 +364,7 @@ describe('scheduling', () => {
       db.call('oh_admin_assign', { p_token: admin, p_week: w7, p_group: ids.g1, p_teacher: ids.joseph, p_d: W7.wed, p_t: '10:30' }),
       'NEEDS_FORCE',
     );
-    expect((e as DbError).detail.split(',')).toEqual(['CAP_DAY', 'NOT_REQUESTED']);
+    expect((e as DbError).detail).toBe('CAP_DAY');
     // Tim is not available on Friday
     e = await expectCode(
       db.call('oh_admin_assign', { p_token: admin, p_week: w7, p_group: ids.g1, p_teacher: ids.tim, p_d: W7.fri, p_t: '10:00' }),
@@ -420,14 +413,6 @@ describe('scheduling', () => {
       'TEACHER_BUSY',
     );
     expect((await db.call('oh_admin_state', { p_token: admin, p_week: w7 })).appointments).toHaveLength(1);
-    // Joseph is free on Wednesday 10:00, but group 1 already has that slot
-    const e = await expectCode(
-      db.call('oh_admin_apply', {
-        p_token: admin, p_week: w7, p_items: [{ group_id: ids.g3, teacher_id: ids.joseph, d: W7.wed, t: '10:00' }],
-      }),
-      'NEEDS_FORCE',
-    );
-    expect((e as DbError).detail).toBe('SLOT_TAKEN');
     const ok = await db.call('oh_admin_apply', {
       p_token: admin, p_week: w7, p_items: [{ group_id: ids.g2, teacher_id: ids.joseph, d: W7.mon, t: '17:00' }],
     });
@@ -479,7 +464,7 @@ describe('administration', () => {
   let db: TestDb;
   let admin: string;
   beforeAll(async () => {
-    db = await makeDb();
+    db = await makeDb({ legacy: true });
     await db.setNow(WED);
     admin = await join(db, (await db.codes()).admin);
   });
@@ -593,96 +578,177 @@ describe('administration', () => {
   });
 });
 
-describe('group teachers', () => {
+describe('weekly booking', () => {
   let db: TestDb;
   let w7: number;
+  let w8: number;
   let admin: string;
   let g1: string;
-  let ids: { joseph: number; prolong: number; tim: number; team: number; g1: number; g2: number };
-  const pairs = async () => (await db.call('oh_admin_config', { p_token: admin })).groups.find((g: any) => g.id === ids.g1).teacher_ids;
-  const pair = (p: Record<string, unknown>) => db.call('oh_admin_save', { p_token: admin, p_kind: 'group', p: { id: ids.g1, ...p } });
+  let g2: string;
+  let g3: string;
+  let g7: string;
+  let joseph: string;
+  let ids: { joseph: number; prolong: number; tim: number; team: number; g2: number; g7: number };
+  const ROOM = { joseph: 'https://meet.google.com/wgj-uxbz-bcv', prolong: 'https://meet.google.com/gtj-tcpu-wmu', tim: 'https://meet.google.com/umx-ikqj-ghi' };
+  const fields = { p_topic: '感測器延遲', p_questions: '要換方案嗎', p_progress: '原型完成', p_link: 'https://drive.google.com/drive/folders/x' };
+  const book = (token: string, week: number, extra: Record<string, unknown> = {}) =>
+    db.call('oh_booking_save', { p_token: token, p_week: week, ...fields, ...extra });
+  const sessions = async (group: number, week: number) =>
+    (await db.call('oh_admin_state', { p_token: admin, p_week: week })).appointments.filter((a: any) => a.group_id === group);
   beforeAll(async () => {
     db = await makeDb();
     await db.setNow(WED);
     const c = await db.codes();
     admin = await join(db, c.admin);
     g1 = await join(db, c.groups[1], 'A');
+    g2 = await join(db, c.groups[2], 'B');
+    g3 = await join(db, c.groups[3], 'C');
+    g7 = await join(db, c.groups[7], 'G');
+    joseph = await join(db, c.teachers.Joseph);
     w7 = await weekId(db, 'W7');
+    w8 = await weekId(db, 'W8');
     ids = {
       joseph: await teacherId(db, 'Joseph'),
       prolong: await teacherId(db, 'Prolong'),
       tim: await teacherId(db, 'Tim'),
       team: (await db.one('select id from app.teachers where team')).id,
-      g1: await groupId(db, 1),
       g2: await groupId(db, 2),
+      g7: await groupId(db, 7),
     };
   });
 
-  it('lets admins pair a group with up to two teachers, never the shared account', async () => {
-    expect((await pair({ teacher_ids: [ids.prolong] })).teacher_ids).toEqual([ids.prolong]);
-    expect(await pairs()).toEqual([ids.prolong]);
-    const cfg = await db.call('oh_admin_config', { p_token: admin });
-    expect(cfg.groups.find((g: any) => g.id === ids.g2).teacher_ids).toEqual([]);
-    const st = await db.call('oh_admin_state', { p_token: admin });
-    expect(st.groups.find((g: any) => g.id === ids.g1).teacher_ids).toEqual([ids.prolong]);
-    await expectCode(pair({ teacher_ids: [ids.team] }), 'NOT_FOUND', 'teacher');
-    await expectCode(pair({ teacher_ids: [9999] }), 'VALIDATION', 'group');
-    await expectCode(pair({ teacher_ids: [ids.joseph, ids.prolong, ids.tim] }), 'VALIDATION', 'teachers');
-    await expectCode(pair({ teacher_ids: [ids.tim, ids.tim] }), 'VALIDATION', 'teachers');
-    await expectCode(pair({ teacher_ids: 'Tim' }), 'VALIDATION', 'teachers');
-    expect(await pairs()).toEqual([ids.prolong]); // failed saves change nothing
-    // the database itself never holds a third teacher
-    await db.sql('insert into app.group_teachers (group_id, teacher_id) values ($1, $2), ($1, $3)', [ids.g2, ids.joseph, ids.tim]);
-    await expect(db.sql('insert into app.group_teachers (group_id, teacher_id) values ($1, $2)', [ids.g2, ids.prolong])).rejects.toThrow();
-    await db.sql('delete from app.group_teachers where group_id = $1', [ids.g2]);
-    // saving other fields keeps the pairing; a page from before sends one teacher_id
-    await pair({ name: '改名' });
-    expect(await pairs()).toEqual([ids.prolong]);
-    await pair({ teacher_id: ids.joseph });
-    expect(await pairs()).toEqual([ids.joseph]);
-    await pair({ teacher_id: null });
-    expect(await pairs()).toEqual([]);
-    await pair({ teacher_ids: [ids.prolong] });
-    await expectCode(db.call('oh_admin_save', { p_token: g1, p_kind: 'group', p: { id: ids.g1, teacher_ids: [] } }), 'FORBIDDEN');
-  });
-
-  it("offers a paired group only its teacher's slots", async () => {
-    const st = await db.call('oh_student_state', { p_token: g1 });
+  it("starts from one hour a week, each group's fixed slot and each PM's room", async () => {
+    const st = await db.call('oh_student_state', { p_token: g2 });
+    expect(st.settings).toMatchObject({ slot_minutes: 60, week_cap: 1, day_cap: 1, close_dow: 6, close_time: '20:00', show_teacher_names: true });
+    expect(st.fixed).toEqual({ dow: 3, t: '10:00', teacher: 'Prolong', room: ROOM.prolong });
     expect(st.week_id).toBe(w7);
-    // Prolong is in on Wednesday, Thursday and Friday 10:00–12:00
-    expect(st.slots).toHaveLength(12);
-    expect(st.slots.every((x: any) => [W7.wed, W7.thu, W7.fri].includes(x.d) && x.t < '12:00')).toBe(true);
+    expect(st.weeks[0]).toMatchObject({ label: 'W7', bookable: true, deadline: '2026-10-17 20:00', status: null, holiday: null });
+    expect(st.weeks[1]).toMatchObject({ label: 'W8', bookable: false }); // only next week is open
+  });
+
+  it("books next week's fixed slot at once, every field required", async () => {
+    await expectCode(book(g2, w7, { p_link: '' }), 'VALIDATION', 'link');
+    await expectCode(book(g2, w7, { p_questions: ' ' }), 'VALIDATION', 'questions');
+    await expectCode(book(g2, w7, { p_topic: '' }), 'VALIDATION', 'topic');
+    await expectCode(book(g2, w7, { p_progress: '' }), 'VALIDATION', 'progress');
+    await expectCode(book(g2, w8), 'WEEK_NOT_YET');
+    const r = await book(g2, w7);
+    expect(r).toMatchObject({ status: 'open', topic: '感測器延遲', want: 1, slots: [{ d: '2026-10-21', t: '10:00' }] });
+    const st = await db.call('oh_student_state', { p_token: g2 });
+    expect(st.weeks[0]).toMatchObject({ status: 'open', booked: 1 });
+    expect(st.appointments).toEqual([
+      expect.objectContaining({ d: '2026-10-21', t: '10:00', status: 'confirmed', teacher: 'Prolong', room: ROOM.prolong, can_cancel: false }),
+    ]);
+    // the PMs see it straight away, with the room
+    const t = await db.call('oh_teacher_state', { p_token: joseph });
+    expect(t.sessions).toEqual([
+      expect.objectContaining({ d: '2026-10-21', t: '10:00', teacher: 'Prolong', room: ROOM.prolong, request: expect.objectContaining({ topic: '感測器延遲' }) }),
+    ]);
+    // a stale page is refused; editing keeps the one session
+    await expectCode(book(g2, w7), 'CONFLICT');
+    await book(g2, w7, { p_topic: '改題目', p_version: r.version });
+    expect(await sessions(ids.g2, w7)).toHaveLength(1);
+  });
+
+  it('lets a group skip the week, and change its mind before the deadline', async () => {
+    let st = await db.call('oh_student_state', { p_token: g2 });
+    const skipped = await db.call('oh_booking_skip', { p_token: g2, p_week: w7, p_version: st.request.version });
+    expect(skipped.status).toBe('skipped');
+    st = await db.call('oh_student_state', { p_token: g2 });
+    expect(st.weeks[0]).toMatchObject({ status: 'skipped', booked: 0 });
+    expect(st.appointments).toEqual([]);
+    expect(st.request.topic).toBe('改題目'); // kept, should they book after all
+    // a group that never booked can skip as well
+    expect(await db.call('oh_booking_skip', { p_token: g1, p_week: w7 })).toMatchObject({ status: 'skipped', topic: '' });
+    await book(g2, w7, { p_version: skipped.version });
+    st = await db.call('oh_student_state', { p_token: g2 });
+    expect(st.weeks[0]).toMatchObject({ status: 'open', booked: 1 });
+    const s = await db.call('oh_admin_state', { p_token: admin, p_week: w7 });
+    expect(s.weeks[0]).toMatchObject({ requests: 1, skipped: 1, scheduled: 1 });
+  });
+
+  it('locks the week on Saturday at 20:00 and opens the next one', async () => {
+    await db.setNow('2026-10-17T19:59:00+08:00');
+    let st = await db.call('oh_student_state', { p_token: g1 });
     expect(st.weeks[0].bookable).toBe(true);
-    expect(st.pair).toBeNull(); // teacher names are hidden from students by default
-    // Joseph's Monday slot cannot be requested
-    await expectCode(db.call('oh_request_save', { p_token: g1, ...basicRequest(w7, [[W7.mon, '17:00']]) }), 'SLOT_INVALID');
-    await db.call('oh_request_save', { p_token: g1, ...basicRequest(w7, [[W7.wed, '10:00'], [W7.thu, '10:00']]) });
+    await db.setNow('2026-10-17T20:00:00+08:00');
+    await expectCode(book(g1, w7, { p_version: st.request.version }), 'WEEK_LATE', '10/17（六）20:00');
+    await expectCode(db.call('oh_booking_skip', { p_token: g1, p_week: w7, p_version: st.request.version }), 'WEEK_LATE');
+    st = await db.call('oh_student_state', { p_token: g1 });
+    expect(st.week_id).toBe(w8);
+    expect(st.weeks[0].bookable).toBe(false);
+    expect(st.weeks[1].bookable).toBe(true);
+    // once its week has closed, a session can be cancelled up to a day before
+    expect((await db.call('oh_student_state', { p_token: g2 })).appointments[0].can_cancel).toBe(true);
+    await db.setNow(WED);
   });
 
-  it('offers the slots of both teachers when paired with two', async () => {
-    await pair({ teacher_ids: [ids.tim, ids.prolong] });
-    expect(await pairs()).toEqual([ids.prolong, ids.tim]); // in the teachers' order
-    const st = await db.call('oh_student_state', { p_token: g1 });
-    expect(st.slots).toHaveLength(16); // Prolong's 12 and Tim's Thursday 16:00–18:00
-    await db.sql('update app.settings set show_teacher_names = true');
-    expect((await db.call('oh_student_state', { p_token: g1 })).pair).toBe('Prolong、Tim');
-    await db.sql('update app.settings set show_teacher_names = false');
+  it('stops for a holiday on the fixed day', async () => {
+    const c = await db.call('oh_admin_save', { p_token: admin, p_kind: 'closure', p: { d: '2026-10-21', reason: '校慶' } }); // a Wednesday
+    const st = await db.call('oh_student_state', { p_token: g3 });
+    expect(st.weeks[0]).toMatchObject({ bookable: false, holiday: '校慶' });
+    await expectCode(book(g3, w7), 'WEEK_HOLIDAY', '校慶');
+    // group 1 meets on Tuesday, so its week goes on
+    expect((await db.call('oh_student_state', { p_token: g1 })).weeks[0].holiday).toBeNull();
+    await db.call('oh_admin_delete', { p_token: admin, p_kind: 'closure', p_id: c.id });
   });
 
-  it('asks before placing a paired group with another teacher', async () => {
-    const e = await expectCode(
-      db.call('oh_admin_assign', { p_token: admin, p_week: w7, p_group: ids.g1, p_teacher: ids.joseph, p_d: W7.wed, p_t: '10:00' }),
-      'NEEDS_FORCE',
-    );
-    expect((e as DbError).detail).toBe('OTHER_TEACHER');
-    const a = await db.call('oh_admin_assign', { p_token: admin, p_week: w7, p_group: ids.g1, p_teacher: ids.prolong, p_d: W7.wed, p_t: '10:00' });
-    expect(a.teacher_id).toBe(ids.prolong);
-    await db.call('oh_admin_remove', { p_token: admin, p_id: a.id });
+  it("lets the admins set each group's fixed slot and each PM's room", async () => {
+    const save = (kind: string, p: Record<string, unknown>) => db.call('oh_admin_save', { p_token: admin, p_kind: kind, p });
+    const cfg = await db.call('oh_admin_config', { p_token: admin });
+    expect(cfg.groups.find((g: any) => g.no === 2)).toMatchObject({ teacher_id: ids.prolong, slot_dow: 3, slot_time: '10:00' });
+    expect(cfg.teachers.find((t: any) => t.name === 'Tim').room).toBe(ROOM.tim);
+    expect((await save('group', { id: ids.g7, teacher_id: ids.tim, slot_dow: 4, slot_time: '16:00' }))).toMatchObject({ teacher_id: ids.tim, slot_dow: 4, slot_time: '16:00' });
+    await expectCode(save('group', { id: ids.g7, slot_time: '16:30' }), 'VALIDATION', 'slot'); // on the hour
+    await expectCode(save('group', { id: ids.g7, teacher_id: null }), 'VALIDATION', 'slot'); // all three or none
+    await expectCode(save('group', { id: ids.g7, teacher_id: ids.team }), 'NOT_FOUND', 'teacher');
+    await save('group', { id: ids.g7, teacher_id: null, slot_dow: null, slot_time: null });
+    expect((await db.call('oh_student_state', { p_token: g7 })).fixed).toBeNull();
+    await expectCode(book(g7, w7), 'NO_FIXED_SLOT');
+    expect((await db.call('oh_student_state', { p_token: g7 })).weeks[0].bookable).toBe(false);
+    // rooms: a link, or none (then the course's location)
+    await expectCode(save('teacher', { id: ids.tim, room: 'not a link' }), 'VALIDATION', 'teacher');
+    expect((await save('teacher', { id: ids.tim, room: 'https://meet.google.com/abc-defg-hij' })).room).toBe('https://meet.google.com/abc-defg-hij');
+    expect((await save('teacher', { id: ids.tim, room: '' })).room).toBeNull();
+    expect((await db.one('select app.room_of($1) as r', [ids.tim])).r).toBe('Google Meet');
+    await save('teacher', { id: ids.tim, room: ROOM.tim });
+    await save('group', { id: ids.g7, teacher_id: ids.joseph, slot_dow: 2, slot_time: '18:00' });
   });
 
-  it('can unpair a group again', async () => {
-    await pair({ teacher_ids: [] });
-    expect((await db.call('oh_student_state', { p_token: g1 })).slots).toHaveLength(24);
+  it('lets the admins hand a session to another PM, move it or cancel it', async () => {
+    const [a] = await sessions(ids.g2, w7);
+    // 代班: Joseph takes Prolong's Wednesday 10:00 (his backup hours)
+    expect(await db.call('oh_admin_move', { p_token: admin, p_id: a.id, p_teacher: ids.joseph, p_d: a.d, p_t: a.t }))
+      .toMatchObject({ teacher_id: ids.joseph, status: 'confirmed' });
+    let st = await db.call('oh_student_state', { p_token: g2 });
+    expect(st.appointments[0]).toMatchObject({ teacher: 'Joseph', room: ROOM.joseph });
+    // editing the booking leaves the admins' change alone
+    await book(g2, w7, { p_version: st.request.version });
+    expect((await sessions(ids.g2, w7)).map((x: any) => x.teacher_id)).toEqual([ids.joseph]);
+    // 改期: Friday 10:00, Prolong's backup time; Tim is not in then
+    expect(await db.call('oh_admin_move', { p_token: admin, p_id: a.id, p_teacher: ids.prolong, p_d: '2026-10-23', p_t: '10:00' }))
+      .toMatchObject({ d: '2026-10-23', t: '10:00', teacher_id: ids.prolong });
+    const off = await expectCode(db.call('oh_admin_move', { p_token: admin, p_id: a.id, p_teacher: ids.tim, p_d: '2026-10-23', p_t: '10:00' }), 'NEEDS_FORCE');
+    expect((off as DbError).detail).toBe('OFF_HOURS');
+    // 取消, with a reason the group sees
+    await db.call('oh_admin_remove', { p_token: admin, p_id: a.id, p_reason: 'Prolong 臨時有事' });
+    st = await db.call('oh_student_state', { p_token: g2 });
+    expect(st.appointments[0]).toMatchObject({ status: 'cancelled', cancel_reason: 'Prolong 臨時有事' });
+    // and editing afterwards does not bring it back
+    await book(g2, w7, { p_version: st.request.version });
+    expect((await sessions(ids.g2, w7)).filter((x: any) => x.status === 'confirmed')).toHaveLength(0);
+  });
+
+  it("puts each PM's room in the calendar and the weekly email", async () => {
+    const st = await db.call('oh_student_state', { p_token: g3 });
+    await book(g3, w7, { p_version: st.request?.version ?? null });
+    const feed = (await db.one(`select feed from app.teachers where name = 'Prolong'`)).feed;
+    const ics = (await db.one(`select convert_from(public.oh_calendar(p_feed => $1), 'UTF8') as v`, [feed])).v as string;
+    expect(ics).toContain('LOCATION:' + ROOM.prolong);
+    const m = (await db.one(`select app.mail_message('2026-10-19', array[$1::int], 'Prolong', 'https://site', '', '') as v`, [ids.prolong])).v;
+    expect(m.html).toContain(ROOM.prolong);
+    expect(m.html).toContain('叁式 ULTRACOMBOS One Hour a Week');
+    expect(m.text).toContain('Prolong：' + ROOM.prolong);
   });
 });
 

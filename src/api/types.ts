@@ -65,7 +65,8 @@ export interface Request {
   link: string | null;
   want: number;
   author: string;
-  status: 'open' | 'withdrawn';
+  /** open = booked, skipped = 這週不約 */
+  status: 'open' | 'withdrawn' | 'skipped';
   version: number;
   created_at: string;
   updated_at: string;
@@ -83,6 +84,10 @@ export interface StudentWeek {
   booked: number;
   /** 'YYYY-MM-DD HH:MM', course time: requests close then */
   deadline: string;
+  /** why the group's fixed day is off that week, if it is */
+  holiday: string | null;
+  /** what the group decided for that week */
+  status: Request['status'] | null;
 }
 
 export interface StudentSlot extends SlotRef {
@@ -100,6 +105,8 @@ export interface StudentAppointment {
   t: string;
   status: 'confirmed' | 'cancelled';
   teacher: string | null;
+  /** the session's Google Meet room */
+  room: string | null;
   cancel_reason: string | null;
   cancelled_by: string | null;
   can_cancel: boolean;
@@ -110,8 +117,10 @@ export interface StudentState {
   clock: ClockInfo;
   settings: Settings;
   me: SessionInfo;
-  /** the group's teachers ("Joseph、Tim"), when teacher names are shown to students */
+  /** the group's PM, when teacher names are shown to students */
   pair: string | null;
+  /** the group's fixed hour a week; null until the admins set it */
+  fixed: { dow: number; t: string; teacher: string | null; room: string | null } | null;
   members: string[];
   week_id: number | null;
   weeks: StudentWeek[];
@@ -129,6 +138,8 @@ export interface TeacherSession {
   status: 'confirmed' | 'cancelled';
   teacher_id: number;
   teacher: string;
+  /** the session's Google Meet room */
+  room: string | null;
   /** the signed-in teacher's own session */
   mine: boolean;
   cancel_reason: string | null;
@@ -188,6 +199,8 @@ export interface AdminWeek {
   /** 'YYYY-MM-DD HH:MM', course time */
   deadline: string;
   requests: number;
+  /** groups that said 這週不約 */
+  skipped: number;
   scheduled: number;
   drafts: number;
 }
@@ -201,14 +214,18 @@ export interface AdminGroup {
   done: number;
   total: number;
   recent_teachers: number[];
-  /** the teachers this group meets (at most two); empty = anyone */
-  teacher_ids: number[];
+  /** the group's fixed weekly slot: its teacher (null when unset), weekday (1 = Monday) and start */
+  teacher_id: number | null;
+  slot_dow: number | null;
+  slot_time: string | null;
 }
 
 export interface Teacher {
   id: number;
   name: string;
   active: boolean;
+  /** their Google Meet room */
+  room: string | null;
 }
 
 export interface ActivityEvent {
@@ -247,8 +264,10 @@ export interface ConfigGroup {
   members: Array<{ id: number; name: string; created_at: string; seen_at: string }>;
   roster: string[];
   used: boolean;
-  /** the teachers this group meets (at most two); empty = anyone */
-  teacher_ids: number[];
+  /** the group's fixed weekly slot: its teacher (null when unset), weekday (1 = Monday) and start */
+  teacher_id: number | null;
+  slot_dow: number | null;
+  slot_time: string | null;
 }
 
 export interface ConfigTeacher {
@@ -261,6 +280,8 @@ export interface ConfigTeacher {
   used: boolean;
   /** the shared account that sees every PM's sessions */
   team: boolean;
+  /** their Google Meet room */
+  room: string | null;
 }
 
 export interface ConfigAdmin {

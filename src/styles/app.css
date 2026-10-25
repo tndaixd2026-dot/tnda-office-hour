@@ -449,6 +449,10 @@ p {
   letter-spacing: -0.01em;
   white-space: nowrap;
 }
+/* the admin sidebar is narrow: the full name wraps there */
+.side .brand-name {
+  white-space: normal;
+}
 /* phones: the top bar (and the sign-in page, whose headline spells the
    name out) keep only the short name; phones up to 420px show the
    connection status as just its dot (the text stays for screen readers),
@@ -2435,20 +2439,6 @@ table.t tr.mine td {
   flex: 0 0 auto;
 }
 
-/* a group's teachers on the groups page: checkboxes in a row */
-fieldset.pairs {
-  border: 0;
-  padding: 0;
-  margin: 0;
-}
-fieldset.pairs > legend {
-  padding: 0;
-  margin-bottom: 6px;
-}
-fieldset.pairs .row {
-  column-gap: 18px;
-  row-gap: 0;
-}
 .check:has(input:disabled) {
   color: var(--faint);
   cursor: not-allowed;

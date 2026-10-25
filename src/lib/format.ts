@@ -1,5 +1,5 @@
 import type { SlotRef } from '../api/types';
-import { addMinutes, dayLabel, isoDow, md, DOW } from './time';
+import { addDays, addMinutes, dayLabel, isoDow, md, DOW } from './time';
 
 /** "週三 10/21  10:00、10:30" lines, one per day. */
 export function slotLines(slots: SlotRef[]): Array<{ d: string; label: string; times: string[] }> {
@@ -35,6 +35,16 @@ export function deadlineText(stamp: string): string {
 }
 
 /** The weekly rule in words: "前一週的週日 12:00" */
+/** "每週三 10:00–11:00" */
+export function fixedText(f: { dow: number; t: string }, minutes: number): string {
+  return `每${DOW[f.dow]} ${timeRange(f.t, minutes)}`;
+}
+
+/** The date of a weekday (1 = Monday) in the week starting on Monday `start`. */
+export function dayOfWeek(start: string, dow: number): string {
+  return addDays(start, dow - 1);
+}
+
 export function closeRuleText(s: { close_dow: number; close_time: string }): string {
   return `前一週的${DOW[s.close_dow]} ${s.close_time}`;
 }

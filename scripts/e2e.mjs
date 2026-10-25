@@ -84,14 +84,14 @@ try {
     // the sign-in page's demo is students only
     await page.getByRole('button', { name: '試玩預約流程' }).click();
     await page.locator('.demobar').waitFor({ timeout: 60000 });
-    await page.getByText('下一次 Office Hour').waitFor();
+    await page.getByRole('heading', { name: '每週預約' }).waitFor();
     check(!(await page.locator('.demobar').getByRole('group', { name: '切換身份' }).count()), 'the sign-in demo should not switch roles');
     await page.locator('.demobar').getByRole('button', { name: '離開' }).click();
     await page.getByRole('heading', { name: '輸入你的名字' }).waitFor();
     // #/demo still has every role
     await page.goto(base + '#/demo', { waitUntil: 'domcontentloaded' });
     await page.locator('.demobar').getByRole('group', { name: '切換身份' }).waitFor({ timeout: 60000 });
-    await page.getByText('下一次 Office Hour').waitFor();
+    await page.getByRole('heading', { name: '每週預約' }).waitFor();
   });
 
   await run('student books a week', async () => {
@@ -100,87 +100,76 @@ try {
       for (let g = 1; g <= 10; g++)
         for (let w = 1; w <= 40; w++) localStorage.setItem(`oh.draft.${g}.${w}`, JSON.stringify({ picks: [], want: 2, topic: '舊草稿', base: null }));
     });
-    // the first week that still says 可預約
-    const open = page.locator('.weeks .wk', { hasText: '可預約' }).first();
-    await open.click();
-    await page.getByRole('button', { name: '開始預約' }).click();
-    await page.getByRole('heading', { name: /勾選可以的時段/ }).waitFor();
-    const cells = page.locator('button.cell[aria-pressed="false"]');
-    check((await cells.count()) >= 3, 'not enough open cells');
-    await cells.nth(0).click();
-    await cells.nth(3).click(); // nth re-evaluates; picks another free cell
-    check((await page.locator('button.cell[aria-pressed="true"]').count()) === 2, 'two cells should be picked');
-    // keyboard: arrows move focus, space toggles
-    const firstCell = page.locator('button.cell[data-r]').first();
-    await firstCell.focus();
-    const before = await page.evaluate(() => document.activeElement?.getAttribute('data-k'));
-    await page.keyboard.press('ArrowDown');
-    const after = await page.evaluate(() => document.activeElement?.getAttribute('data-k'));
-    check(before && after && before !== after, 'arrow keys should move between cells');
-    const wasOn = await page.evaluate(() => document.activeElement?.getAttribute('aria-pressed'));
-    await page.keyboard.press('Space');
-    const nowOn = await page.evaluate(() => document.activeElement?.getAttribute('aria-pressed'));
-    check(wasOn !== nowOn, 'space should toggle a cell');
-    await page.keyboard.press('Space');
-    // validation: empty topic
-    await page.getByRole('button', { name: '送出預約需求' }).click();
+    // only the week that is open for booking says 可預約
+    await page.locator('.weeks .wk', { hasText: '可預約' }).first().click();
+    await page.getByRole('button', { name: '預約這週' }).first().click();
+    await page.getByText('你們的固定時段').waitFor();
+    // every field is required, the folder link too
+    await page.getByRole('button', { name: '預約這週' }).click();
     await page.getByText('請寫下想討論的題目').waitFor();
+    await page.getByText('請貼上這次要討論的雲端資料夾連結').waitFor();
     await page.getByLabel('想討論的題目').fill('E2E：互動裝置的動線');
     await page.getByLabel('想問 PM 的問題').fill('E2E：動線要單向嗎');
     await page.getByLabel('目前進度').fill('E2E 測試進度');
     await page.getByLabel('雲端資料夾連結').fill('not a url');
-    await page.getByRole('button', { name: '送出預約需求' }).click();
+    await page.getByRole('button', { name: '預約這週' }).click();
     await page.getByText('請貼完整網址').waitFor();
     await page.getByLabel('雲端資料夾連結').fill('https://drive.google.com/drive/folders/e2e');
-    await page.getByRole('button', { name: '送出預約需求' }).click();
-    await page.getByText('E2E：互動裝置的動線').waitFor();
-    await page.getByText('等待排程').first().waitFor();
+    await page.getByRole('button', { name: '預約這週' }).click();
+    await page.getByText('E2E：互動裝置的動線').first().waitFor();
+    await page.locator('.weeks .wk[aria-pressed="true"]', { hasText: '已預約' }).waitFor();
   });
 
-  await run('student edits and sees the change', async () => {
-    await page.getByRole('button', { name: '修改需求' }).click();
+  await run('student edits, skips the week and books it again', async () => {
+    await page.getByRole('button', { name: '修改內容' }).click();
     await page.getByLabel('想討論的題目').fill('E2E：改過的題目');
-    await page.getByRole('button', { name: '更新需求' }).click();
-    await page.getByText('E2E：改過的題目').waitFor();
+    await page.getByRole('button', { name: '更新內容' }).click();
+    await page.getByText('E2E：改過的題目').first().waitFor();
+    await page.getByRole('button', { name: '這週不約' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: '這週不約' }).click();
+    await page.locator('.weeks .wk[aria-pressed="true"]', { hasText: '這週不約' }).waitFor();
+    await page.getByRole('button', { name: '改成預約' }).click();
+    // the form keeps what they wrote
+    check((await page.getByLabel('想討論的題目').inputValue()) === 'E2E：改過的題目', 'the booking should come back filled in');
+    await page.getByRole('button', { name: '預約這週' }).click();
+    await page.locator('.weeks .wk[aria-pressed="true"]', { hasText: '已預約' }).waitFor();
   });
 
-  await run('admin auto-schedules and publishes', async () => {
+  await run('admin hands a session to another PM, moves it and cancels it', async () => {
     await role(page, '助教');
-    await page.getByRole('heading', { name: /需求/ }).first().waitFor();
-    const auto = page.getByRole('button', { name: '閃身步排程法' });
-    await auto.waitFor();
-    check(await auto.isEnabled(), 'auto-schedule should be enabled with pending requests');
-    await auto.click();
-    await page.getByRole('dialog', { name: '閃身步排程法結果' }).waitFor();
-    const drafts = await page.getByRole('dialog').locator('.li').count();
-    check(drafts > 0, 'auto-schedule produced no drafts');
-    await page.getByRole('button', { name: '直接發布' }).click();
-    await page.getByRole('dialog', { name: /已發布/ }).waitFor();
-    check((await page.getByRole('dialog').locator('pre').count()) > 0, 'no notice messages');
-    await page.getByRole('button', { name: '完成', exact: true }).click();
-    await page.waitForTimeout(400);
-    check(!(await page.getByRole('button', { name: /發布 \d+ 筆/ }).count()), 'drafts should be gone after publish');
-  });
-
-  await run('admin assigns a slot by hand and removes it', async () => {
-    const lane = page.locator('button.lane:not(.filled):not(:disabled)').first();
-    await lane.click();
-    const dlg = page.getByRole('dialog', { name: '安排小組' });
-    await dlg.waitFor();
-    const first = dlg.getByRole('button', { name: '安排' }).first();
-    if (await first.count()) {
-      await first.click();
+    await page.locator('.stat-pills').waitFor();
+    // the first week, from this one on, with a session still to come
+    const weeks = page.locator('.weeks .wk:not(.past)');
+    for (let i = 0; i < (await weeks.count()); i++) {
+      await weeks.nth(i).click();
+      await page.waitForTimeout(500);
+      if (await page.getByRole('button', { name: '代班' }).count()) break;
+    }
+    const first = page.locator('section.card', { has: page.getByRole('button', { name: '代班' }) }).first();
+    const row = page.getByRole('region', { name: await first.getAttribute('aria-label') });
+    const force = async () => {
+      const b = page.getByRole('button', { name: '仍要安排' });
+      if (await b.isVisible({ timeout: 1500 }).catch(() => false)) await b.click();
+    };
+    await row.getByRole('button', { name: '代班' }).click();
+    await page.getByRole('dialog', { name: '代班' }).getByRole('button', { name: '代班' }).first().click();
+    await force();
+    await row.locator('.chip', { hasText: '代班' }).waitFor();
+    await row.getByRole('button', { name: '改期' }).click();
+    const dlg = page.getByRole('dialog', { name: '改期' });
+    const here = dlg.getByRole('button', { name: '改到這裡' }).first();
+    if (await here.count()) {
+      await here.click();
     } else {
       await dlg.locator('summary').click();
-      await dlg.locator('details button').first().click();
+      await dlg.getByRole('button', { name: '改到這個時間' }).click();
     }
-    // rule breaking asks for confirmation
-    const confirmBreak = page.getByRole('button', { name: '仍要安排' });
-    if (await confirmBreak.isVisible().catch(() => false)) await confirmBreak.click();
-    await page.locator('.lane.filled.draft').first().waitFor();
-    await page.locator('.lane.filled.draft').first().click();
-    await page.getByRole('button', { name: '移除草稿' }).click();
-    await page.waitForTimeout(400);
+    await force();
+    await row.locator('.chip', { hasText: '改期' }).waitFor();
+    await row.getByRole('button', { name: '取消', exact: true }).click();
+    await page.getByRole('dialog').getByLabel('原因（會顯示給這組）').fill('E2E 業師臨時有事');
+    await page.getByRole('dialog').getByRole('button', { name: '取消這場' }).click();
+    await row.getByText('E2E 業師臨時有事').waitFor();
   });
 
   await run('admin pages render', async () => {
@@ -212,19 +201,29 @@ try {
     await page.getByText(/「陳柏宇」已經在其他組/).waitFor();
     check((await d.getByLabel('學生名單').inputValue()).includes('陳柏宇'), 'roster text should be kept after an error');
     await d.getByRole('button', { name: '取消' }).click();
-    // pair a group with up to two teachers, then undo it
-    const card5 = page.locator('.card', { has: page.getByRole('button', { name: '第 5 組選單' }) });
-    await card5.getByLabel('Tim', { exact: true }).check();
-    await page.getByText('第 5 組改成搭配 Tim').waitFor();
-    await card5.getByLabel('Joseph', { exact: true }).check();
-    await page.getByText('第 5 組改成搭配 Joseph、Tim').waitFor();
-    await card5.getByText('只會排到 Joseph、Tim 的時段').waitFor();
-    check(await card5.getByLabel('Prolong', { exact: true }).isDisabled(), 'a third teacher should not be offered');
-    await card5.getByLabel('Joseph', { exact: true }).uncheck();
-    await card5.getByLabel('Tim', { exact: true }).uncheck();
-    await page.getByText('第 5 組改成不指定老師').waitFor();
     await page.getByRole('complementary', { name: '管理選單' }).getByRole('link', { name: '設定' }).click();
     await page.getByRole('heading', { name: '課程與規則' }).first().waitFor();
+  });
+
+  await run("admin sets a group's fixed slot and a PM's room", async () => {
+    await page.getByRole('complementary', { name: '管理選單' }).getByRole('link', { name: '小組與邀請' }).click();
+    await page.getByRole('button', { name: /第 7 組的固定時段$/ }).click();
+    let d = page.getByRole('dialog', { name: '第 7 組的固定時段' });
+    await d.getByLabel('星期').selectOption('1');
+    await d.getByLabel('開始時間').selectOption('18:00');
+    await d.getByRole('button', { name: '儲存' }).click();
+    await page.getByText('第 7 組：每週一 18:00–19:00 · Joseph').waitFor();
+    await page.getByRole('button', { name: /第 7 組的固定時段$/ }).click();
+    d = page.getByRole('dialog', { name: '第 7 組的固定時段' });
+    await d.getByLabel('星期').selectOption('2');
+    await d.getByRole('button', { name: '儲存' }).click();
+    await page.getByText('第 7 組：每週二 18:00–19:00 · Joseph').waitFor();
+    await page.getByRole('complementary', { name: '管理選單' }).getByRole('link', { name: '老師' }).click();
+    await page.getByRole('button', { name: 'Tim 選單' }).click();
+    await page.getByRole('menuitem', { name: '設定討論室' }).click();
+    await page.getByRole('dialog').getByLabel('討論室連結').fill('https://meet.google.com/e2e-room-tim');
+    await page.getByRole('dialog').getByRole('button', { name: '儲存' }).click();
+    await page.getByText('meet.google.com/e2e-room-tim').waitFor();
   });
 
   await run('admin sets up the weekly email and previews it', async () => {
@@ -243,13 +242,13 @@ try {
     await page.getByLabel('看誰會收到什麼').selectOption({ label: 'E2E 老師 e2e@example.com' });
     await page.locator('iframe.mail-frame').waitFor();
     check((await page.locator('iframe.mail-frame').getAttribute('srcdoc'))?.includes('E2E 老師 您好'), 'the preview should be the recipient\'s email');
-    // first in the list: the admins' Sunday-noon reminder to schedule
-    check(await page.getByRole('switch', { name: '週日 12:00 寄審核提醒到助教信箱' }).isChecked(), 'the reminder should be on');
+    // nothing is left to schedule, so there is no Sunday-noon reminder; the preview comes first
+    check(!(await page.getByRole('switch', { name: /審核提醒/ }).count()), 'the reminder switch should be gone');
     await page.getByLabel('看誰會收到什麼').selectOption({ index: 0 });
-    await page.waitForFunction(() => document.querySelector('iframe.mail-frame')?.getAttribute('srcdoc')?.includes('打開排程'));
+    await page.waitForFunction(() => document.querySelector('iframe.mail-frame')?.getAttribute('srcdoc')?.includes('這是預覽'));
     await page.getByRole('complementary', { name: '管理選單' }).getByRole('link', { name: '設定' }).click();
     await page.getByRole('heading', { name: '課程與規則' }).first().waitFor();
-    check((await page.getByLabel('截止的星期').inputValue()) === '7' && (await page.getByLabel('截止的時間').inputValue()) === '12:00', 'requests should close on Sunday at noon');
+    check((await page.getByLabel('截止的星期').inputValue()) === '6' && (await page.getByLabel('截止的時間').inputValue()) === '20:00', 'bookings should close on Saturday at 20:00');
   });
 
   await run('admin changes a setting', async () => {
@@ -456,7 +455,9 @@ try {
     await role(page, '學生');
     await page.getByText('E2E 公告').waitFor();
     check(await page.locator('.hero').isVisible(), 'hero missing');
-    check((await page.locator('.rules').textContent()).includes('前一週的週日 12:00'), 'the rules should give the weekly deadline');
+    const rules = await page.locator('.rules').textContent();
+    check(rules.includes('前一週的週六 20:00'), 'the rules should give the weekly deadline');
+    check(rules.includes('每週三 10:00–11:00'), 'the rules should give the fixed slot');
   });
 
   await run('teachers share one view of every PM', async () => {
@@ -476,23 +477,20 @@ try {
 
   console.log('mobile');
   const m = await session({ width: 390, height: 844 }, true);
-  await run('mobile demo + booking grid', async () => {
+  await run('mobile demo + booking form', async () => {
     await m.page.goto(base + '#/demo', { waitUntil: 'domcontentloaded' });
     await m.page.locator('.demobar').waitFor({ timeout: 60000 });
     const overflow = await m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     check(overflow <= 0, `page scrolls sideways by ${overflow}px`);
     await m.page.locator('.weeks .wk', { hasText: '可預約' }).first().click();
-    await m.page.getByRole('button', { name: '開始預約' }).click();
-    await m.page.locator('button.cell').first().tap();
-    check((await m.page.locator('button.cell[aria-pressed="true"]').count()) === 1, 'tap should pick a cell');
+    await m.page.getByRole('button', { name: '預約這週' }).first().click();
+    await m.page.getByLabel('想討論的題目').waitFor();
     const overflow2 = await m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     check(overflow2 <= 0, `booking page scrolls sideways by ${overflow2}px`);
   });
-  await run('mobile admin shows one day at a time', async () => {
+  await run('mobile admin board fits the screen', async () => {
     await role(m.page, '助教');
-    await m.page.locator('.matrix').waitFor();
-    const cols = await m.page.locator('.matrix .mh').count();
-    check(cols === 1, `expected 1 day column, got ${cols}`);
+    await m.page.locator('.stat-pills').waitFor();
     const overflow = await m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     check(overflow <= 0, `admin page scrolls sideways by ${overflow}px`);
   });
@@ -502,7 +500,7 @@ try {
     let overflow = await m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     check(overflow <= 0, `teacher view scrolls sideways by ${overflow}px`);
     await m.page.locator('.demobar').getByRole('button', { name: '助教', exact: true }).click();
-    await m.page.locator('.matrix').waitFor();
+    await m.page.locator('.stat-pills').waitFor();
     await m.page.evaluate(() => (location.hash = '#/admin/mail'));
     await m.page.getByRole('heading', { name: '每週寄給老師的信' }).waitFor();
     overflow = await m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);

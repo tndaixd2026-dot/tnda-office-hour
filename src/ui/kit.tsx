@@ -339,7 +339,8 @@ export function safeHref(url: string | null | undefined): string | undefined {
 }
 
 /** Where sessions happen: a link when it is a URL (e.g. a Google Meet room), plain text otherwise. */
-export function Place({ value }: { value: string }) {
+/** A meeting place; a link opens it. `full` shows the address (admins tell the rooms apart). */
+export function Place({ value, full }: { value: string; full?: boolean }) {
   const href = safeHref(value.trim());
   if (!href) return <>{value || '線上'}</>;
   let host = '';
@@ -348,7 +349,7 @@ export function Place({ value }: { value: string }) {
   } catch {
     return <>{value}</>;
   }
-  const label = /(^|\.)meet\.google\.com$/i.test(host) ? 'Google Meet 會議室' : href.replace(/^https?:\/\//i, '');
+  const label = !full && /(^|\.)meet\.google\.com$/i.test(host) ? 'Google Meet 會議室' : href.replace(/^https?:\/\//i, '');
   return (
     <a class="place" href={href} target="_blank" rel="noopener noreferrer">
       {label}

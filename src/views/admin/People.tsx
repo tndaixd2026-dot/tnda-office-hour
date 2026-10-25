@@ -1,10 +1,11 @@
 import { useState } from 'preact/hooks';
-import type { AdminConfig, ConfigGroup, ConfigTeacher } from '../../api/types';
+import type { AdminConfig, Block, ConfigGroup, ConfigTeacher } from '../../api/types';
 import { useApi, useBusy, useLive, useTick } from '../../app/hooks';
-import { agoText } from '../../lib/time';
+import { fixedText, timeRange } from '../../lib/format';
+import { agoText, DOW } from '../../lib/time';
 import { ask, confirm, openDialog } from '../../ui/dialog';
 import { Icon } from '../../ui/icons';
-import { Btn, CopyBtn, Empty, Field, Loading, Menu, QR, Switch, copyText } from '../../ui/kit';
+import { Btn, CopyBtn, Empty, Field, Loading, Menu, Place, QR, Switch, copyText } from '../../ui/kit';
 import { toast } from '../../ui/toast';
 import { ErrorState } from '../student/StudentApp';
 import { siteUrl } from './common';
@@ -104,7 +105,7 @@ export function GroupsPage() {
           <p class="eyebrow">小組與邀請</p>
           <h1 class="title-l">{cfg.groups.length} 個小組</h1>
           <p class="muted small" style={{ maxWidth: '560px' }}>
-            在每組的「學生名單」填上同學的名字，同學到首頁輸入自己的名字就能登入；也可以把邀請連結貼到各組的 Discord，點開、輸入名字加入。整組共用同一份預約。每組可以搭配一到兩位老師，隨時都能改
+            在每組的「學生名單」填上同學的名字，同學到首頁輸入自己的名字就能登入；也可以把邀請連結貼到各組的 Discord，點開、輸入名字加入。整組共用同一份預約。每組有一個固定時段（業師、星期、時間），每週決定要不要約
           </p>
         </div>
         <div class="row wrap">
@@ -118,7 +119,7 @@ export function GroupsPage() {
       </div>
       <div class="group-grid">
         {cfg.groups.map((g) => (
-          <GroupCard key={g.id} g={g} teachers={cfg.teachers.filter((t) => !t.team && (t.active || g.teacher_ids.includes(t.id)))} now={now} save={save} reload={reload} />
+          <GroupCard key={g.id} g={g} cfg={cfg} now={now} save={save} reload={reload} />
         ))}
       </div>
     </main>
@@ -127,13 +128,13 @@ export function GroupsPage() {
 
 function GroupCard({
   g,
-  teachers,
+  cfg,
   now,
   save,
   reload,
 }: {
   g: ConfigGroup;
-  teachers: ConfigTeacher[];
+  cfg: AdminConfig;
   now: number;
   save: (p: Record<string, unknown>, ok?: string) => Promise<unknown>;
   reload: () => void;
@@ -141,12 +142,11 @@ function GroupCard({
   const { call } = useApi();
   const { busy, run } = useBusy();
   const link = inviteLink(g.code);
-  const pairs = teachers.filter((t) => g.teacher_ids.includes(t.id));
-  const names = (ts: ConfigTeacher[]) => ts.map((t) => t.name).join('、');
-  const togglePair = (t: ConfigTeacher, on: boolean) => {
-    const next = teachers.filter((x) => (x.id === t.id ? on : g.teacher_ids.includes(x.id)));
-    save({ id: g.id, teacher_ids: next.map((x) => x.id) }, next.length ? `第 ${g.no} 組改成搭配 ${names(next)}` : `第 ${g.no} 組改成不指定老師`);
-  };
+  const mins = cfg.settings.slot_minutes;
+  const teacher = cfg.teachers.find((t) => t.id === g.teacher_id);
+  const fixed = teacher && g.slot_dow && g.slot_time ? { dow: g.slot_dow, t: g.slot_time } : null;
+  const editSlot = () =>
+    openDialog(`第 ${g.no} 組的固定時段`, (close) => <SlotForm g={g} cfg={cfg} close={close} save={save} />);
 
   const editRoster = async () => {
     let text = g.roster.join('\n');
@@ -237,22 +237,21 @@ function GroupCard({
           )}
         </Menu>
       </div>
-      <fieldset class="field pairs">
-        <legend class="label">搭配老師（最多兩位）</legend>
-        <div class="row wrap">
-          {teachers.map((t) => {
-            const on = g.teacher_ids.includes(t.id);
-            return (
-              <label class="check" key={t.id}>
-                <input type="checkbox" checked={on} disabled={!on && pairs.length >= 2} onChange={() => togglePair(t, !on)} />
-                {t.name}
-                {t.active ? '' : '（停用中）'}
-              </label>
-            );
-          })}
+      <div class="stack tight">
+        <div class="row between">
+          <span class="eyebrow">固定時段</span>
+          <Btn size="sm" variant="ghost" icon="edit" onClick={editSlot} aria-label={`${fixed ? '修改' : '設定'}第 ${g.no} 組的固定時段`}>
+            {fixed ? '修改' : '設定'}
+          </Btn>
         </div>
-        <span class="help">{pairs.length ? `只會排到 ${names(pairs)} 的時段，學生也只看得到這些時段` : '都不勾時，所有老師的時段都可以排'}</span>
-      </fieldset>
+        {fixed && teacher ? (
+          <span class="small">
+            <b>{fixedText(fixed, mins)}</b> · {teacher.name}
+          </span>
+        ) : (
+          <span class="small muted">還沒設定，設定後這組才能預約</span>
+        )}
+      </div>
       <div class="card sunk tight stack tight">
         <span class="eyebrow">邀請代碼</span>
         <span class="mono" style={{ fontSize: '19px', letterSpacing: '0.12em', fontWeight: 500 }}>
@@ -336,6 +335,103 @@ function GroupCard({
       <DiscordRow g={g} save={save} />
       <Switch checked={g.active} onChange={(v) => save({ id: g.id, active: v }, v ? '已啟用' : '已停用，這組的成員會被登出')} label={g.active ? '啟用中' : '已停用'} />
     </div>
+  );
+}
+
+/** A PM's weekly open hours, e.g. "週三 10:00–12:00、週四 10:00–12:00". */
+function openHours(blocks: Block[], teacher: number): string {
+  return blocks
+    .filter((b) => b.teacher_id === teacher && b.dow && !b.on_date)
+    .sort((a, b) => a.dow! - b.dow! || a.start.localeCompare(b.start))
+    .map((b) => `${DOW[b.dow!]} ${b.start}–${b.end}`)
+    .join('、');
+}
+
+/** Teacher, weekday and start of a group's fixed hour, or none. */
+function SlotForm({ g, cfg, close, save }: { g: ConfigGroup; cfg: AdminConfig; close: () => void; save: (p: Record<string, unknown>, ok?: string) => Promise<unknown> }) {
+  const mins = cfg.settings.slot_minutes;
+  const teachers = cfg.teachers.filter((t) => !t.team && (t.active || t.id === g.teacher_id));
+  const [teacher, setTeacher] = useState<number>(g.teacher_id ?? teachers[0]?.id ?? 0);
+  const [dow, setDow] = useState<number>(g.slot_dow ?? 1);
+  const [time, setTime] = useState<string>(g.slot_time ?? '10:00');
+  const hours = Array.from({ length: Math.floor((14 * 60) / mins) + 1 }, (_, i) => {
+    const m = 8 * 60 + i * mins;
+    return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  });
+  const open = cfg.blocks.some((b) => b.teacher_id === teacher && b.dow === dow && !b.on_date && b.start <= time && timeRange(time, mins).slice(6) <= b.end);
+  const clash = cfg.groups.filter((x) => x.id !== g.id && x.teacher_id === teacher && x.slot_dow === dow && x.slot_time === time);
+  const name = cfg.teachers.find((t) => t.id === teacher)?.name ?? '';
+  return (
+    <>
+      <h2>第 {g.no} 組的固定時段</h2>
+      <p class="small muted">每週一次，每次 {mins / 60} 小時。學生每週決定要不要用這個時段</p>
+      <Field label="業師">
+        <select class="select" value={String(teacher)} onChange={(e) => setTeacher(Number((e.target as HTMLSelectElement).value))}>
+          {teachers.map((t) => (
+            <option key={t.id} value={String(t.id)}>
+              {t.name}
+              {t.active ? '' : '（停用中）'}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <div class="row wrap top" style={{ gap: '12px' }}>
+        <Field label="星期">
+          <select class="select" value={String(dow)} onChange={(e) => setDow(Number((e.target as HTMLSelectElement).value))}>
+            {[1, 2, 3, 4, 5, 6, 7].map((d) => (
+              <option key={d} value={String(d)}>
+                {DOW[d]}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="開始時間">
+          <select class="select" value={time} onChange={(e) => setTime((e.target as HTMLSelectElement).value)}>
+            {hours.map((h) => (
+              <option key={h} value={h}>
+                {timeRange(h, mins)}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
+      <p class="small muted">{name} 的開放時段：{openHours(cfg.blocks, teacher) || '還沒設定'}</p>
+      {!open && <p class="small" style={{ color: 'var(--warn)' }}>這個時間不在 {name} 的開放時段，可以先到「時段與週次」加上</p>}
+      {clash.length > 0 && (
+        <p class="small" style={{ color: 'var(--warn)' }}>
+          {clash.map((x) => `第 ${x.no} 組`).join('、')} 也是這個時段
+        </p>
+      )}
+      <div class="actions">
+        {g.teacher_id && (
+          <button
+            type="button"
+            class="btn danger"
+            style={{ marginRight: 'auto' }}
+            onClick={async () => {
+              await save({ id: g.id, teacher_id: null, slot_dow: null, slot_time: null }, `已清除第 ${g.no} 組的固定時段`);
+              close();
+            }}
+          >
+            清除
+          </button>
+        )}
+        <button type="button" class="btn" onClick={() => close()}>
+          取消
+        </button>
+        <button
+          type="button"
+          class="btn primary"
+          disabled={!teacher}
+          onClick={async () => {
+            await save({ id: g.id, teacher_id: teacher, slot_dow: dow, slot_time: time }, `第 ${g.no} 組：${fixedText({ dow, t: time }, mins)} · ${name}`);
+            close();
+          }}
+        >
+          儲存
+        </button>
+      </div>
+    </>
   );
 }
 
@@ -524,6 +620,7 @@ function TeacherRow({ t, save, reload }: { t: ConfigTeacher; save: (p: Record<st
       <div class="grow stack" style={{ gap: '2px', minWidth: '160px' }}>
         <b>{t.name}</b>
         <span class="tiny muted">{t.devices ? `${t.devices} 台裝置登入中` : '還沒有登入'}</span>
+        {!t.team && <span class="tiny">{t.room ? <Place value={t.room} full /> : <span class="muted">還沒設定討論室</span>}</span>}
       </div>
       <span class="mono small" style={{ letterSpacing: '0.08em' }}>
         {prettyCode(t.code)}
@@ -547,6 +644,29 @@ function TeacherRow({ t, save, reload }: { t: ConfigTeacher; save: (p: Record<st
             >
               <Icon name="edit" /> 修改名字
             </button>
+            {!t.team && (
+              <button
+                type="button"
+                class="mi"
+                role="menuitem"
+                onClick={async () => {
+                  close();
+                  const room = await ask({
+                    title: `${t.name} 的討論室`,
+                    body: '貼上這位業師的 Google Meet 連結。學生和業師的畫面、行事曆和每週的信都會用這個連結',
+                    label: '討論室連結',
+                    placeholder: 'https://meet.google.com/…',
+                    initial: t.room ?? '',
+                    optional: true,
+                    maxLength: 200,
+                    ok: '儲存',
+                  });
+                  if (room !== null) save({ id: t.id, room: room.trim() }, room.trim() ? '已更新討論室' : '已清除討論室');
+                }}
+              >
+                <Icon name="video" /> 設定討論室
+              </button>
+            )}
             <button
               type="button"
               class="mi"

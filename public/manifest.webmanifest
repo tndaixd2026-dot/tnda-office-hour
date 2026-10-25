@@ -1,7 +1,7 @@
 {
-  "name": "叁式 一天 30 分鐘 一週三次 · 跨域數位製作實務",
-  "short_name": "叁式 一天 30 分鐘",
-  "description": "和叁式 PM 約 30 分鐘。勾選可以的時段，助教排好後全組即時同步。",
+  "name": "叁式 ULTRACOMBOS One Hour a Week · 跨域數位製作實務",
+  "short_name": "叁式 ULTRACOMBOS",
+  "description": "每組每週和叁式 PM 一小時的線上討論。每週決定要不要約，送出就排定，全組即時同步。",
   "lang": "zh-Hant-TW",
   "start_url": "./",
   "scope": "./",

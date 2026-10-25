@@ -1,7 +1,6 @@
 # The weekly email to the teachers (scripts/send-mail.mjs). GitHub starts
 # scheduled runs late at busy times, so each one starts early and the
 # script waits for the exact time in Taipei:
-#   Sunday 12:00  next week's requests to the admins' mailbox, to schedule
 #   Sunday 18:00  a preview of everything to the admins' mailbox
 #   Monday 08:00  each recipient's week of sessions
 # Needs the repository secrets GMAIL_USER and GMAIL_APP_PASSWORD (a Gmail
@@ -10,15 +9,14 @@ name: Weekly email
 
 on:
   schedule:
-    - cron: '38 3 * * 0' # Sunday 11:38 Taipei
     - cron: '38 9 * * 0' # Sunday 17:38 Taipei
     - cron: '38 23 * * 0' # Monday 07:38 Taipei (Sunday 23:38 UTC)
   workflow_dispatch:
     inputs:
       kind:
-        description: 'test：用正式場次寄一封測試信給寄件的 Gmail 自己；sample：用示範場次寄一封範例信給自己；sample_all：用示範場次寄標明【測試】的信給所有收件人（開關關著的也寄）；remind：寄審核提醒給助教信箱；preview：寄預覽給助教信箱；weekly：寄給開啟的收件人'
+        description: 'test：用正式場次寄一封測試信給寄件的 Gmail 自己；sample：用示範場次寄一封範例信給自己；sample_all：用示範場次寄標明【測試】的信給所有收件人（開關關著的也寄）；preview：寄預覽給助教信箱；weekly：寄給開啟的收件人'
         type: choice
-        options: [test, sample, sample_all, remind, preview, weekly]
+        options: [test, sample, sample_all, preview, weekly]
         default: test
       force:
         description: '這週已經寄過也再寄一次'
@@ -55,8 +53,8 @@ jobs:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
       - name: Send
         env:
-          KIND: ${{ github.event_name == 'workflow_dispatch' && inputs.kind || (github.event.schedule == '38 3 * * 0' && 'remind' || (github.event.schedule == '38 9 * * 0' && 'preview' || 'weekly')) }}
-          SEND_AT: ${{ github.event_name == 'schedule' && (github.event.schedule == '38 3 * * 0' && '12:00' || (github.event.schedule == '38 9 * * 0' && '18:00' || '08:00')) || '' }}
+          KIND: ${{ github.event_name == 'workflow_dispatch' && inputs.kind || (github.event.schedule == '38 9 * * 0' && 'preview' || 'weekly') }}
+          SEND_AT: ${{ github.event_name == 'schedule' && (github.event.schedule == '38 9 * * 0' && '18:00' || '08:00') || '' }}
           FORCE: ${{ inputs.force && '1' || '' }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
           ONLY: ${{ inputs.only }}

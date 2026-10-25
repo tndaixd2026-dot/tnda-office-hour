@@ -1,20 +1,18 @@
-import { useEffect, useMemo, useState } from 'preact/hooks';
-import type { AdminState, Appointment, Request } from '../../api/types';
-import { clock, useApi, useBusy, useDiff, useLive, useMedia, useTick } from '../../app/hooks';
+import { useState } from 'preact/hooks';
+import type { AdminGroup, AdminState, Appointment } from '../../api/types';
+import { clock, useApi, useBusy, useDiff, useLive, useTick } from '../../app/hooks';
 import { ISSUE } from '../../app/messages';
 import { go, href } from '../../app/router';
 import { local } from '../../app/store';
 import { csvText, download } from '../../lib/files';
-import { MAIL_PREVIEW, MAIL_SEND } from '../../config';
-import { deadlineText, minutesText, slotLines, timeRange } from '../../lib/format';
-import { autoSchedule } from '../../lib/scheduler';
-import { addDays, addMinutes, agoText, dayLabel, DOW, isoDow, localStamp, md, mdPad, minutes } from '../../lib/time';
+import { dayOfWeek, deadlineText, timeRange } from '../../lib/format';
+import { addDays, dayLabel, DOW, isoDow, localStamp, mdPad } from '../../lib/time';
 import { ask, confirm, openDialog } from '../../ui/dialog';
 import { Icon } from '../../ui/icons';
-import { Btn, CopyBtn, Empty, Loading, Menu, WeekStrip, copyText, safeHref } from '../../ui/kit';
+import { Btn, CopyBtn, Empty, Loading, Place, WeekStrip, safeHref } from '../../ui/kit';
 import { toast } from '../../ui/toast';
 import { ErrorState } from '../student/StudentApp';
-import { eventText, groupName, noticeText, siteUrl } from './common';
+import { eventText, groupName, siteUrl } from './common';
 
 export function Board({ weekParam }: { weekParam: number | null }) {
   const { data, error, reload } = useLive<AdminState>('oh_admin_state', { p_week: weekParam });
@@ -28,99 +26,80 @@ export function Board({ weekParam }: { weekParam: number | null }) {
   return <BoardView st={data} reload={reload} />;
 }
 
+type RowState = 'booked' | 'cancelled' | 'skipped' | 'holiday' | 'nofixed' | 'waiting';
+
+interface Row {
+  g: AdminGroup;
+  state: RowState;
+  /** this week's date and time of the group's fixed slot */
+  fixed: { teacher: number; d: string; t: string } | null;
+  session: Appointment | null;
+  cancelled: Appointment | null;
+  holiday: string | undefined;
+}
+
+/** One week: each group's fixed hour, what they decided, and the session to adjust. */
 function BoardView({ st, reload }: { st: AdminState; reload: () => void }) {
   const { call } = useApi();
   const { busy, run } = useBusy(st.settings);
   const now = useTick(60000);
-  const [focus, setFocus] = useState<number | null>(null);
-  const [dragId, setDragId] = useState<number | null>(null);
-  const [dropKey, setDropKey] = useState<string | null>(null);
-  const compact = useMedia('(max-width: 720px)');
-  const [day, setDay] = useState<string | null>(null);
-  useEffect(() => {
-    setFocus(null);
-    setDay(null);
-  }, [st.week_id]);
-
   const week = st.weeks.find((w) => w.id === st.week_id) ?? null;
   const mins = st.settings.slot_minutes;
-  const tz = st.clock.tz;
-  const weekCap = st.settings.week_cap;
-  const live = st.appointments.filter((a) => a.status !== 'cancelled');
-  const drafts = st.appointments.filter((a) => a.status === 'draft');
-  const cancelled = st.appointments.filter((a) => a.status === 'cancelled');
-  const openReqs = st.requests.filter((r) => r.status === 'open');
-  const countFor = (gid: number) => live.filter((a) => a.group_id === gid).length;
-  const needOf = (r: Request) => Math.min(r.want, weekCap) - countFor(r.group_id);
-  const pending = openReqs.filter((r) => needOf(r) > 0);
-  const activeGroups = st.groups.filter((g) => g.active);
-  const missing = activeGroups.filter((g) => !openReqs.some((r) => r.group_id === g.id));
-  const scheduledGroups = new Set(st.appointments.filter((a) => a.status === 'confirmed').map((a) => a.group_id));
+  const nowStamp = localStamp(now, st.clock.tz);
   const tName = (id: number) => st.teachers.find((t) => t.id === id)?.name ?? '—';
-  const gOf = (id: number) => st.groups.find((g) => g.id === id);
-  // a paired group meets only its teachers (at most two); unpaired, anyone
-  const pairsOf = (gid: number) => gOf(gid)?.teacher_ids ?? [];
-  const meets = (gid: number, tid: number) => !pairsOf(gid).length || pairsOf(gid).includes(tid);
-  const pairText = (gid: number) => pairsOf(gid).map(tName).join('、');
+  const room = (id: number) => st.teachers.find((t) => t.id === id)?.room ?? st.settings.location;
+  const slotMap = new Map(st.slots.map((s) => [`${s.d} ${s.t}`, s]));
+  const holidays = new Map(st.closures.filter((c) => c.teacher_id === null).map((c) => [c.d, c.reason || '放假']));
 
-  // ---------- grid geometry ----------
-  const days = useMemo(() => {
-    if (!week) return [];
-    return [0, 1, 2, 3, 4, 5, 6]
-      .map((i) => addDays(week.start, i))
-      .filter((d, i) => i < 5 || st.slots.some((s) => s.d === d) || live.some((a) => a.d === d));
-  }, [week?.start, st.slots, st.appointments]);
-  const times = useMemo(() => {
-    const set = new Set([...st.slots.map((s) => s.t), ...live.map((a) => a.t)]);
-    return [...set].sort((a, b) => minutes(a) - minutes(b));
-  }, [st.slots, st.appointments]);
-  const slotMap = useMemo(() => new Map(st.slots.map((s) => [`${s.d} ${s.t}`, s])), [st.slots]);
-  const demandMap = useMemo(() => {
-    const m = new Map<string, Request[]>();
-    for (const r of openReqs) for (const s of r.slots) m.set(`${s.d} ${s.t}`, [...(m.get(`${s.d} ${s.t}`) ?? []), r]);
-    return m;
-  }, [st.requests]);
-  const focusKeys = useMemo(() => {
-    const r = openReqs.find((x) => x.group_id === focus);
-    return new Set(r?.slots.map((s) => `${s.d} ${s.t}`) ?? []);
-  }, [focus, st.requests]);
-  const holidays = new Map(st.closures.filter((c) => c.teacher_id === null).map((c) => [c.d, c.reason]));
-  const nowStamp = localStamp(now, tz);
-  const maxDemand = Math.max(1, ...[...demandMap.values()].map((rs) => rs.filter((r) => needOf(r) > 0).length));
-  const attention = live.filter((a) => !slotMap.get(`${a.d} ${a.t}`)?.teachers.includes(a.teacher_id) && `${a.d} ${a.t}` >= nowStamp).length;
+  if (!week) {
+    return (
+      <main class="page">
+        <Empty icon="calendar" title="還沒有任何週次">
+          先到「時段與週次」建立學期的週次
+        </Empty>
+      </main>
+    );
+  }
 
-  // phones show one day at a time
-  const dayLoad = (d: string) => st.slots.filter((s) => s.d === d).length + live.filter((a) => a.d === d).length;
-  const dayWant = (d: string) => openReqs.filter((r) => needOf(r) > 0 && r.slots.some((s) => s.d === d)).length;
-  const defaultDay = days.find((d) => dayWant(d) > 0) ?? days.find((d) => d >= clock.today && dayLoad(d) > 0) ?? days.find((d) => dayLoad(d) > 0) ?? days[0];
-  const shownDays = compact && days.length ? [day && days.includes(day) ? day : defaultDay] : days;
-  const shownTimes = compact
-    ? times.filter((t) => shownDays.some((d) => slotMap.has(`${d} ${t}`) || live.some((a) => a.d === d && a.t === t)))
-    : times;
+  const open = nowStamp < week.deadline;
+  const active = st.groups.filter((g) => g.active);
+  const rows: Row[] = active
+    .map((g) => {
+      const req = st.requests.find((r) => r.group_id === g.id) ?? null;
+      const mine = st.appointments.filter((a) => a.group_id === g.id).sort((a, b) => (a.d + a.t).localeCompare(b.d + b.t));
+      const session = mine.find((a) => a.status !== 'cancelled') ?? null;
+      const cancelled = mine.find((a) => a.status === 'cancelled') ?? null;
+      const fixed = g.teacher_id && g.slot_dow && g.slot_time ? { teacher: g.teacher_id, d: dayOfWeek(week.start, g.slot_dow), t: g.slot_time } : null;
+      const holiday = fixed ? holidays.get(fixed.d) : undefined;
+      const state: RowState = session
+        ? 'booked'
+        : req?.status === 'skipped'
+          ? 'skipped'
+          : cancelled
+            ? 'cancelled'
+            : holiday
+              ? 'holiday'
+              : !fixed
+                ? 'nofixed'
+                : 'waiting';
+      return { g, state, fixed, session, cancelled, holiday };
+    })
+    .sort((a, b) => (a.fixed ? `${a.fixed.d} ${a.fixed.t}` : `z${a.g.no}`).localeCompare(b.fixed ? `${b.fixed.d} ${b.fixed.t}` : `z${b.g.no}`));
+  const count = (s: RowState) => rows.filter((r) => r.state === s).length;
+  const waiting = rows.filter((r) => r.state === 'waiting');
 
   // ---------- actions ----------
-  async function assign(args: { group: number; teacher: number; d: string; t: string; moveId?: number }) {
-    const moving = args.moveId ? st.appointments.find((a) => a.id === args.moveId) : null;
-    if (moving && moving.d === args.d && moving.t === args.t && moving.teacher_id === args.teacher) return;
-    if (moving?.status === 'confirmed') {
-      const ok = await confirm({
-        title: '移動已發布的場次？',
-        body: `${groupName(st.groups, moving.group_id)} 會從 ${dayLabel(moving.d)} ${moving.t} 改到 ${dayLabel(args.d)} ${args.t}（${tName(args.teacher)}）。這組和老師的畫面會立刻更新，有連結 Discord 的話也會收到通知`,
-        ok: '移動',
-      });
-      if (!ok) return;
-    }
-    const fn = args.moveId ? 'oh_admin_move' : 'oh_admin_assign';
-    const payload: Record<string, unknown> = args.moveId
-      ? { p_id: args.moveId, p_teacher: args.teacher, p_d: args.d, p_t: args.t }
-      : { p_week: st.week_id, p_group: args.group, p_teacher: args.teacher, p_d: args.d, p_t: args.t };
+  async function move(a: Appointment, teacher: number, d: string, t: string) {
+    if (a.teacher_id === teacher && a.d === d && a.t === t) return;
+    const payload = { p_id: a.id, p_teacher: teacher, p_d: d, p_t: t };
     let issues: string | null = null;
-    const r = await run('assign', () => call(fn, payload), {
+    const r = await run('move', () => call('oh_admin_move', payload), {
       onError: (e) => {
         if (e.code !== 'NEEDS_FORCE') return false;
         issues = e.detail;
         return true;
       },
+      ok: '已更新，學生和業師會即時看到',
     });
     if (!r && issues) {
       const list = (issues as string).split(',').map((x) => ISSUE[x] ?? x);
@@ -133,340 +112,165 @@ function BoardView({ st, reload }: { st: AdminState; reload: () => void }) {
                 <li key={x}>{x}</li>
               ))}
             </ul>
-            <p>如果已經和這組或老師確認過，仍然可以安排</p>
+            <p>如果已經和業師確認過，仍然可以安排</p>
           </>
         ),
         ok: '仍要安排',
       });
-      if (ok) await run('assign', () => call(fn, { ...payload, p_force: true }));
+      if (ok) await run('move', () => call('oh_admin_move', { ...payload, p_force: true }), { ok: '已更新，學生和業師會即時看到' });
     }
     reload();
   }
 
-  async function remove(a: Appointment) {
-    const g = groupName(st.groups, a.group_id);
-    if (a.status === 'draft') {
-      await run('remove', () => call('oh_admin_remove', { p_id: a.id }));
-    } else {
-      const reason = await ask({
-        title: `取消${g}的 ${dayLabel(a.d)} ${a.t}？`,
-        body: '這組和老師的畫面會立刻顯示已取消，時段也會釋出',
-        label: '原因（會顯示給這組）',
-        optional: true,
-        maxLength: 200,
-        ok: '取消這場',
-      });
-      if (reason === null) return;
-      await run('remove', () => call('oh_admin_remove', { p_id: a.id, p_reason: reason }), { ok: '已取消' });
-    }
-    reload();
-  }
-
-  async function auto() {
-    const proposal = autoSchedule({
-      slots: st.slots,
-      appointments: st.appointments,
-      requests: st.requests,
-      groups: st.groups,
-      weekCap,
-      dayCap: st.settings.day_cap,
-      notBefore: nowStamp,
-    });
-    if (!proposal.length) {
-      toast('沒有可以再自動安排的組別：待排的組勾的時段都已經滿了');
-      return;
-    }
-    const r = await run('auto', () => call<{ count: number }>('oh_admin_apply', { p_week: st.week_id, p_items: proposal }));
-    if (!r) {
-      reload();
-      return;
-    }
-    reload();
-    const served = new Map<number, number>();
-    for (const p of proposal) served.set(p.group_id, (served.get(p.group_id) ?? 0) + 1);
-    const left = pending.filter((q) => needOf(q) - (served.get(q.group_id) ?? 0) > 0);
-    const go2 = await openDialog<boolean>('閃身步排程法結果', (close) => (
-      <>
-        <div class="stack tight">
-          <p class="eyebrow">閃身步排程法</p>
-          <h2>已建立 {proposal.length} 筆草稿</h2>
-          <p class="muted small">優先照顧本學期討論次數較少、較早送出的組。有搭配老師的組只排給搭配的老師，其他組盡量延續上次的 {st.settings.host_label}。草稿只有助教看得到</p>
-        </div>
-        <div class="list">
-          {proposal.map((p, i) => (
-            <div class="li" key={i}>
-              <span class="gno">{gOf(p.group_id)?.no}</span>
-              <span class="grow">{dayLabel(p.d)} <span class="mono">{timeRange(p.t, mins)}</span></span>
-              <span class="small muted">{tName(p.teacher_id)}</span>
-            </div>
-          ))}
-        </div>
-        {left.length > 0 && (
-          <div class="notice warn">
-            <Icon name="alert" />
-            <span>
-              {left.map((q) => groupName(st.groups, q.group_id)).join('、')} 勾選的時段已經排滿，沒辦法再安排。可以在 Discord 請他們多勾幾格，或手動安排其他時段
-            </span>
-          </div>
-        )}
-        <div class="actions">
-          <button type="button" class="btn" onClick={() => close(false)}>
-            先檢查一下
-          </button>
-          <button type="button" class="btn primary" data-autofocus onClick={() => close(true)}>
-            直接發布
-          </button>
-        </div>
-      </>
-    ));
-    if (go2) publish(true);
-  }
-
-  async function publish(skipConfirm = false) {
-    const n = drafts.length || undefined;
-    if (!skipConfirm) {
-      const ok = await confirm({
-        title: `發布 ${n ?? ''} 筆排程？`,
-        body: '發布後，各組與老師的畫面會立刻更新',
-        ok: '發布',
-      });
-      if (!ok) return;
-    }
-    const r = await run('publish', () => call<{ published: Appointment[] }>('oh_admin_publish', { p_week: st.week_id }));
-    reload();
-    if (!r) return;
-    if (!r.published.length) {
-      toast('沒有需要發布的草稿');
-      return;
-    }
-    const all = [...st.appointments.filter((a) => a.status === 'confirmed'), ...r.published];
-    showNotices([...new Set(r.published.map((a) => a.group_id))], all, `已發布 ${r.published.length} 筆排程`);
-  }
-
-  function showNotices(groupIds: number[], appts: Appointment[], title = '通知訊息') {
-    const texts = groupIds
-      .map((gid) => ({ gid, text: noticeText(st, gid, appts, siteUrl()) }))
-      .sort((a, b) => (gOf(a.gid)?.no ?? 0) - (gOf(b.gid)?.no ?? 0));
-    openDialog(title, (close) => (
-      <>
-        <div class="stack tight">
-          <h2>{title}</h2>
-          <p class="muted small">各組在平台上已經看得到；有連結 Discord 的組別也已經自動收到通知。其他組可以複製下面的訊息，貼到他們的聊天室</p>
-        </div>
-        <div class="stack">
-          {texts.map(({ gid, text }) => (
-            <div class="card sunk tight stack tight" key={gid}>
-              <pre class="pre small" style={{ margin: '0px', fontFamily: 'inherit' }}>
-                {text}
-              </pre>
-              <div>
-                <CopyBtn text={text} label={`複製第 ${gOf(gid)?.no} 組`} />
-              </div>
-            </div>
-          ))}
-        </div>
-        <div class="actions">
-          <Btn icon="copy" onClick={() => copyText(texts.map((x) => x.text).join('\n\n'), '已複製全部訊息')}>
-            複製全部
-          </Btn>
-          <button type="button" class="btn primary" onClick={() => close()}>
-            完成
-          </button>
-        </div>
-      </>
-    ), { wide: 'wide' });
-  }
-
-  async function discard() {
-    if (!(await confirm({ title: `清除 ${drafts.length} 筆草稿？`, body: '只會刪除還沒發布的草稿，已發布的不受影響', ok: '清除', danger: true }))) return;
-    await run('discard', () => call('oh_admin_discard', { p_week: st.week_id }), { ok: '已清除草稿' });
-    reload();
-  }
-
-  function openCell(d: string, t: string, teacher: number) {
-    const key = `${d} ${t}`;
-    // groups paired with other teachers go last
-    const elsewhere = (gid: number) => !meets(gid, teacher);
-    const cands = (demandMap.get(key) ?? [])
-      .slice()
-      .sort((a, b) => Number(elsewhere(a.group_id)) - Number(elsewhere(b.group_id)) || needOf(b) - needOf(a) || a.created_at.localeCompare(b.created_at));
-    const others = activeGroups.filter((g) => !cands.some((c) => c.group_id === g.id));
-    const busyGroups = new Set(live.filter((a) => a.d === d && a.t === t).map((a) => a.group_id));
-    openDialog<number>('安排小組', (close) => (
+  async function substitute(a: Appointment) {
+    const others = st.teachers.filter((t) => t.active && t.id !== a.teacher_id);
+    const tid = await openDialog<number>('代班', (close) => (
       <>
         <div class="stack tight">
           <p class="eyebrow">
-            {dayLabel(d)} {timeRange(t, mins)} · {tName(teacher)}
+            {groupName(st.groups, a.group_id)} · {dayLabel(a.d)} {timeRange(a.t, mins)} · 原本 {tName(a.teacher_id)}
           </p>
-          <h2>要安排哪一組？</h2>
+          <h2>請哪位業師代班？</h2>
+          <p class="small muted">時間不變，學生畫面會換成代班業師的討論室</p>
         </div>
-        {cands.length ? (
-          <div class="list">
-            {cands.map((r) => {
-              const g = gOf(r.group_id)!;
-              const have = countFor(r.group_id);
-              const sameDay = live.some((a) => a.group_id === r.group_id && a.d === d);
-              const blocked = busyGroups.has(r.group_id);
-              const other = elsewhere(r.group_id);
-              return (
-                <div class="li" key={r.id}>
-                  <span class="gno">{g.no}</span>
-                  <div class="grow stack" style={{ gap: '0px' }}>
-                    <b class="small">{g.name || `第 ${g.no} 組`}</b>
-                    <span class="tiny muted clamp-2">{r.topic}</span>
-                  </div>
-                  {other ? (
-                    <span class="chip warn">搭配 {pairText(g.id)}</span>
-                  ) : (
-                    <span class={`chip ${have >= Math.min(r.want, weekCap) ? 'ok' : sameDay ? 'warn' : ''}`}>
-                      {sameDay ? '當天已有' : `已排 ${have}/${Math.min(r.want, weekCap)}`}
-                    </span>
-                  )}
-                  <Btn size="sm" variant={have < r.want && !sameDay && !other ? 'primary' : undefined} disabled={blocked} onClick={() => close(r.group_id)}>
-                    安排
-                  </Btn>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <p class="muted small">沒有小組勾選這個時段</p>
-        )}
-        {others.length > 0 && (
-          <details>
-            <summary class="small muted" style={{ cursor: 'pointer' }}>
-              其他小組（沒有勾選這格）
-            </summary>
-            <div class="row wrap" style={{ marginTop: '10px' }}>
-              {others.map((g) => (
-                <Btn size="sm" key={g.id} disabled={busyGroups.has(g.id)} onClick={() => close(g.id)}>
-                  <span class="gno soft" style={{ minWidth: '20px', height: '20px', fontSize: '11px' }}>
-                    {g.no}
-                  </span>
-                  {g.name || `第 ${g.no} 組`}
+        <div class="list">
+          {others.map((t) => {
+            const taken = st.appointments.some((x) => x.status !== 'cancelled' && x.teacher_id === t.id && x.d === a.d && x.t === a.t);
+            const free = slotMap.get(`${a.d} ${a.t}`)?.teachers.includes(t.id);
+            return (
+              <div class="li" key={t.id}>
+                <TeacherDot id={t.id} teachers={st.teachers} />
+                <span class="grow stack" style={{ gap: '0px' }}>
+                  <b class="small">{t.name}</b>
+                  <span class="tiny muted">{taken ? '這個時段已有場次' : free ? '這個時段有開放' : '不在開放時段，要先和業師確認'}</span>
+                </span>
+                <Btn size="sm" variant={free && !taken ? 'primary' : undefined} disabled={taken} onClick={() => close(t.id)}>
+                  代班
                 </Btn>
-              ))}
-            </div>
-          </details>
-        )}
+              </div>
+            );
+          })}
+        </div>
         <div class="actions">
           <button type="button" class="btn" onClick={() => close()}>
             關閉
           </button>
         </div>
       </>
-    )).then((gid) => {
-      if (gid) assign({ group: gid, teacher, d, t });
-    });
+    ));
+    if (tid) await move(a, tid, a.d, a.t);
   }
 
-  function openAppt(a: Appointment) {
-    const g = gOf(a.group_id);
-    const r = st.requests.find((x) => x.group_id === a.group_id);
-    openDialog<'remove'>('場次詳情', (close) => (
+  async function reschedule(a: Appointment) {
+    // the same PM's free open hours this week; a backup hour is one no group has fixed
+    const fixedKeys = new Set(active.filter((g) => g.teacher_id && g.slot_dow).map((g) => `${g.teacher_id} ${g.slot_dow} ${g.slot_time}`));
+    const free = st.slots
+      .filter(
+        (s) =>
+          s.teachers.includes(a.teacher_id) &&
+          `${s.d} ${s.t}` >= nowStamp &&
+          !(s.d === a.d && s.t === a.t) &&
+          !st.appointments.some((x) => x.status !== 'cancelled' && x.teacher_id === a.teacher_id && x.d === s.d && x.t === s.t),
+      )
+      .map((s) => ({ ...s, backup: !fixedKeys.has(`${a.teacher_id} ${isoDow(s.d)} ${s.t}`) }));
+    const pick = await openDialog<{ d: string; t: string }>('改期', (close) => (
       <>
         <div class="stack tight">
           <p class="eyebrow">
-            {dayLabel(a.d)} {timeRange(a.t, mins)} · {tName(a.teacher_id)}
+            {groupName(st.groups, a.group_id)} · 原本 {dayLabel(a.d)} {timeRange(a.t, mins)} · {tName(a.teacher_id)}
           </p>
-          <h2 class="row">
-            <span class="gno">{g?.no}</span>
-            {g?.name || `第 ${g?.no} 組`}
-          </h2>
-          <span class={`chip ${a.status === 'draft' ? 'accent' : 'ok'}`} style={{ width: 'fit-content' }}>
-            {a.status === 'draft' ? '草稿：還沒發布' : '已發布'}
-          </span>
+          <h2>改到什麼時候？</h2>
         </div>
-        {r && (
-          <dl class="kv">
-            <dt>題目</dt>
-            <dd>{r.topic}</dd>
-            {r.questions && (
-              <>
-                <dt>想問的問題</dt>
-                <dd class="pre">{r.questions}</dd>
-              </>
-            )}
-            <dt>進度</dt>
-            <dd class="pre">{r.progress}</dd>
-            {safeHref(r.link) && (
-              <>
-                <dt>資料</dt>
-                <dd>
-                  <a href={safeHref(r.link)} target="_blank" rel="noopener noreferrer">
-                    雲端資料夾
-                  </a>
-                </dd>
-              </>
-            )}
-            <dt>填寫</dt>
-            <dd>
-              {r.author} · {agoText(r.updated_at, clock.now())}
-            </dd>
-          </dl>
+        {free.length ? (
+          <div class="list">
+            {free.map((s) => (
+              <div class="li" key={`${s.d} ${s.t}`}>
+                <span class="grow">
+                  {dayLabel(s.d)} <span class="mono">{timeRange(s.t, mins)}</span>
+                </span>
+                {s.backup && <span class="chip ok">備案時段</span>}
+                <Btn size="sm" variant={s.backup ? 'primary' : undefined} onClick={() => close({ d: s.d, t: s.t })}>
+                  改到這裡
+                </Btn>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p class="small muted">{tName(a.teacher_id)} 這週沒有其他空的開放時段</p>
         )}
-        <p class="tiny faint">
-          {a.created_by} 安排{a.published_at ? `，${agoText(a.published_at, clock.now())}發布` : ''}。在桌機上可以直接把這格拖到其他時段
-        </p>
+        <OtherTime start={week!.start} onPick={(d, t) => close({ d, t })} />
         <div class="actions">
-          <button type="button" class="btn danger" onClick={() => close('remove')}>
-            {a.status === 'draft' ? '移除草稿' : '取消這場'}
-          </button>
-          <button type="button" class="btn primary" onClick={() => close()}>
-            完成
+          <button type="button" class="btn" onClick={() => close()}>
+            關閉
           </button>
         </div>
       </>
-    )).then((v) => {
-      if (v === 'remove') remove(a);
+    ));
+    if (pick) await move(a, a.teacher_id, pick.d, pick.t);
+  }
+
+  async function cancelSession(a: Appointment) {
+    const reason = await ask({
+      title: `取消${groupName(st.groups, a.group_id)}的 ${dayLabel(a.d)} ${a.t}？`,
+      body: '這組和業師的畫面會立刻顯示已取消',
+      label: '原因（會顯示給這組）',
+      placeholder: '例：業師臨時有事，這週停一次',
+      optional: true,
+      maxLength: 200,
+      ok: '取消這場',
     });
+    if (reason === null) return;
+    await run('remove', () => call('oh_admin_remove', { p_id: a.id, p_reason: reason }), { ok: '已取消' });
+    reload();
+  }
+
+  /** Put a group in its fixed slot by hand (e.g. it asked the admins after the deadline). */
+  async function place(r: Row) {
+    if (!r.fixed) return;
+    const ok = await confirm({
+      title: `幫${groupName(st.groups, r.g.id)}排進固定時段？`,
+      body: `${dayLabel(r.fixed.d)} ${timeRange(r.fixed.t, mins)} · ${tName(r.fixed.teacher)}。這組和業師會立刻看到`,
+      ok: '排進去',
+    });
+    if (!ok) return;
+    const a = await run('place', () =>
+      call('oh_admin_assign', { p_week: st.week_id, p_group: r.g.id, p_teacher: r.fixed!.teacher, p_d: r.fixed!.d, p_t: r.fixed!.t, p_force: true }),
+    );
+    if (a) await run('place', () => call('oh_admin_publish', { p_week: st.week_id }), { ok: '已排定' });
+    reload();
   }
 
   const exportWeek = () => {
-    const rows = live
-      .slice()
-      .sort((a, b) => (a.d + a.t).localeCompare(b.d + b.t))
-      .map((a) => ({
-        date: a.d,
-        time: timeRange(a.t, mins),
-        group: gOf(a.group_id)?.no,
-        name: gOf(a.group_id)?.name,
-        teacher: tName(a.teacher_id),
-        status: a.status === 'draft' ? '草稿' : '已發布',
-        topic: st.requests.find((r) => r.group_id === a.group_id)?.topic ?? '',
-      }));
+    const list = rows.map((r) => {
+      const a = r.session;
+      return {
+        group: r.g.no,
+        name: r.g.name,
+        state: STATE_TEXT[r.state](open),
+        date: a?.d ?? '',
+        time: a ? timeRange(a.t, mins) : '',
+        teacher: a ? tName(a.teacher_id) : '',
+        topic: st.requests.find((x) => x.group_id === r.g.id && x.status === 'open')?.topic ?? '',
+      };
+    });
     download(
-      `office-hour-${week?.label || week?.start}.csv`,
-      csvText(rows, [
-        ['date', '日期'],
-        ['time', '時間'],
+      `office-hour-${week.label || week.start}.csv`,
+      csvText(list, [
         ['group', '組別'],
         ['name', '組名'],
+        ['state', '狀態'],
+        ['date', '日期'],
+        ['time', '時間'],
         ['teacher', st.settings.host_label],
-        ['status', '狀態'],
         ['topic', '題目'],
       ]),
       'text/csv;charset=utf-8',
     );
   };
 
-  if (!week) {
-    return (
-      <main class="page">
-        <Empty icon="calendar" title="還沒有任何週次">
-          先到「時段與週次」建立學期的週次
-        </Empty>
-      </main>
-    );
-  }
-
-  const requestsSorted = st.requests.slice().sort((a, b) => {
-    const rank = (r: Request) => (r.status !== 'open' ? 3 : needOf(r) > 0 ? (countFor(r.group_id) ? 1 : 0) : 2);
-    return rank(a) - rank(b) || a.created_at.localeCompare(b.created_at);
-  });
-
   return (
     <main class="page" style={{ gap: '20px' }}>
+      <SetupGuide st={st} />
       <div class="stack">
         <div class="row between wrap">
           <div class="stack tight">
@@ -478,68 +282,15 @@ function BoardView({ st, reload }: { st: AdminState; reload: () => void }) {
               </span>
             </h1>
           </div>
-          <div class="toolbar">
-            <Btn icon="spark" onClick={auto} loading={busy === 'auto'} disabled={!pending.length}>
-              閃身步排程法
-            </Btn>
-            <Btn variant="primary" icon="send" onClick={() => publish()} loading={busy === 'publish'} disabled={!drafts.length}>
-              發布{drafts.length ? ` ${drafts.length} 筆` : ''}
-            </Btn>
-            <Menu label="更多動作" trigger={<Icon name="more" />}>
-              {(close) => (
-                <>
-                  <button
-                    type="button"
-                    class="mi"
-                    role="menuitem"
-                    disabled={!scheduledGroups.size}
-                    onClick={() => {
-                      close();
-                      showNotices([...scheduledGroups], st.appointments, '本週通知訊息');
-                    }}
-                  >
-                    <Icon name="chat" /> 本週通知訊息
-                  </button>
-                  <button
-                    type="button"
-                    class="mi"
-                    role="menuitem"
-                    onClick={() => {
-                      close();
-                      exportWeek();
-                    }}
-                  >
-                    <Icon name="download" /> 匯出本週（CSV）
-                  </button>
-                  <button
-                    type="button"
-                    class="mi danger"
-                    role="menuitem"
-                    disabled={!drafts.length}
-                    onClick={() => {
-                      close();
-                      discard();
-                    }}
-                  >
-                    <Icon name="trash" /> 清除草稿
-                  </button>
-                </>
-              )}
-            </Menu>
-          </div>
+          <Btn icon="download" onClick={exportWeek}>
+            匯出本週
+          </Btn>
         </div>
-        {nowStamp < week.deadline ? (
-          <p class="small muted">學生的需求在 {deadlineText(week.deadline)} 截止，截止後就不能再修改</p>
-        ) : (
-          nowStamp < `${week.start} 00:00` && (
-            <div class="notice warn">
-              <Icon name="clock" />
-              <span class="small">
-                需求已在 {deadlineText(week.deadline)} 截止。請在 {MAIL_PREVIEW} 前排好並發布，{MAIL_SEND} 會把這週的場次寄給老師
-              </span>
-            </div>
-          )
-        )}
+        <p class="small muted">
+          {open
+            ? `各組在 ${deadlineText(week.deadline)} 前決定要不要約，送出就排定`
+            : `已在 ${deadlineText(week.deadline)} 截止。業師臨時有事時，可以在下面安排代班、改期或取消`}
+        </p>
         <WeekStrip
           value={st.week_id}
           onPick={(id) => go(`admin/board/${id}`)}
@@ -548,292 +299,244 @@ function BoardView({ st, reload }: { st: AdminState; reload: () => void }) {
             start: w.start,
             label: w.label,
             past: addDays(w.start, 6) < clock.today,
-            pip: w.drafts > 0,
-            on: w.requests > w.scheduled,
-            status: !w.open ? '暫停' : w.requests ? `${w.scheduled}/${w.requests} 組已排` : '沒有需求',
+            on: w.scheduled > 0,
+            status: !w.open ? '暫停' : `${w.scheduled} 組預約`,
           }))}
         />
         <div class="stat-pills" aria-label="本週統計">
-          <span class="chip">需求 {openReqs.length} 組</span>
-          <span class="chip ok">已發布 {scheduledGroups.size} 組</span>
-          {drafts.length > 0 && <span class="chip accent">草稿 {drafts.length} 筆</span>}
-          {pending.length > 0 && <span class="chip warn">待排 {pending.length} 組</span>}
-          {missing.length > 0 && <span class="chip outline">未送出 {missing.length} 組</span>}
-          {!week.open && <span class="chip danger">本週暫停預約</span>}
-          {attention > 0 && (
-            <span class="chip danger">
-              <Icon name="alert" size={13} />
-              {attention} 場不在開放時段
-            </span>
-          )}
+          <span class="chip ok">已預約 {count('booked')} 組</span>
+          <span class="chip">這週不約 {count('skipped')} 組</span>
+          {waiting.length > 0 && <span class="chip warn">{open ? '還沒回覆' : '沒有預約'} {waiting.length} 組</span>}
+          {count('cancelled') > 0 && <span class="chip danger">已取消 {count('cancelled')} 組</span>}
         </div>
+        {open && waiting.length > 0 && (
+          <div class="card sunk tight stack tight">
+            <span class="small">
+              <b>還沒回覆：</b>
+              {waiting.map((r) => `第 ${r.g.no} 組`).join('、')}
+            </span>
+            <div>
+              <CopyBtn
+                text={`提醒：${week.label || mdPad(week.start)} 的 Office Hour 要在 ${deadlineText(week.deadline)} 前決定要不要約，請到平台按「預約這週」或「這週不約」：${siteUrl()}`}
+                label="複製提醒訊息"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
-      <SetupGuide st={st} />
+      {rows.length === 0 ? (
+        <Empty icon="users" title="還沒有小組">
+          到「小組與邀請」新增小組
+        </Empty>
+      ) : (
+        <div class="stack">
+          {rows.map((r) => (
+            <GroupRow
+              key={r.g.id}
+              r={r}
+              st={st}
+              open={open}
+              nowStamp={nowStamp}
+              tName={tName}
+              room={room}
+              busy={busy}
+              onSubstitute={substitute}
+              onReschedule={reschedule}
+              onCancel={cancelSession}
+              onPlace={place}
+            />
+          ))}
+        </div>
+      )}
+    </main>
+  );
+}
 
-      <div class="board">
-        <section aria-label="排程表" class="stack">
-          {times.length === 0 ? (
-            <Empty icon="calendar" title="這週沒有開放時段">
-              到「時段與週次」設定老師的開放時段
-            </Empty>
-          ) : (
-            <>
-            {compact && (
-              <div class="weeks" role="group" aria-label="選擇日期">
-                {days.map((d) => (
-                  <button type="button" key={d} class="wk" style={{ minWidth: '72px' }} aria-pressed={d === shownDays[0]} onClick={() => setDay(d)}>
-                    <span class="w">{DOW[isoDow(d)]}</span>
-                    <span class="d">{md(d)}</span>
-                    <span class={`s ${dayWant(d) ? 'on' : ''}`}>{dayWant(d) ? `${dayWant(d)} 組想要` : dayLoad(d) ? `${live.filter((a) => a.d === d).length} 場` : '—'}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            <div class="matrix-scroll">
-              <div class="matrix" style={{ '--cols': shownDays.length }}>
-                <div class="corner" />
-                {shownDays.map((d) => (
-                  <div class="mh" key={d}>
-                    <b>{DOW[isoDow(d)]}</b>
-                    <span>{md(d)}</span>
-                    {holidays.has(d) && <span class="tag">{holidays.get(d) || '休息'}</span>}
-                    {st.closures
-                      .filter((c) => c.d === d && c.teacher_id !== null)
-                      .map((c) => (
-                        <span class="tag" key={c.id}>
-                          {tName(c.teacher_id!)} 請假{c.reason ? `（${c.reason}）` : ''}
-                        </span>
-                      ))}
-                  </div>
-                ))}
-                {shownTimes.map((t, ti) => [
-                  ti > 0 && minutes(t) - minutes(shownTimes[ti - 1]) > mins ? (
-                    <div class="gapr" key={`gap-${t}`}>
-                      {addMinutes(shownTimes[ti - 1], mins)}–{t} 不開放
-                    </div>
-                  ) : null,
-                  <div class="mt" key={`t-${t}`}>
-                    {t}
-                  </div>,
-                  ...shownDays.map((d) => {
-                    const key = `${d} ${t}`;
-                    const slot = slotMap.get(key);
-                    const here = live.filter((a) => a.d === d && a.t === t);
-                    const lanes = st.teachers
-                      .filter((x) => slot?.teachers.includes(x.id) || here.some((a) => a.teacher_id === x.id))
-                      .map((x) => x.id);
-                    const past = `${d} ${t}` < nowStamp;
-                    const want = (demandMap.get(key) ?? []).filter((r) => needOf(r) > 0 && !here.some((a) => a.group_id === r.group_id));
-                    // groups paired with other teachers do not count in this teacher's lane
-                    const wantFor = (tid: number) => want.filter((r) => meets(r.group_id, tid)).length;
-                    if (!lanes.length) return <div class={`mc off`} key={key} aria-hidden="true" />;
-                    // demand heat, like the original prototype: darker = more groups want this slot
-                    const heat = !past && want.length ? Math.min(1, want.length / maxDemand) : 0;
-                    return (
-                      <div
-                        class={`mc ${past ? 'past' : ''} ${focusKeys.has(key) ? 'hl' : ''} ${heat ? 'heat' : ''}`}
-                        key={key}
-                        style={heat ? { '--heat': `${Math.round(6 + heat * 22)}%` } : undefined}
-                      >
-                        {lanes.map((tid) => {
-                          const a = here.find((x) => x.teacher_id === tid);
-                          const laneKey = `${key} ${tid}`;
-                          if (a) {
-                            const g = gOf(a.group_id);
-                            // e.g. the teacher took the day off after this was booked
-                            const offHours = !slot?.teachers.includes(tid);
-                            return (
-                              <button
-                                type="button"
-                                key={laneKey}
-                                class={`lane filled ${a.status === 'draft' ? 'draft' : ''} ${offHours ? 'off-hours' : ''}`}
-                                title={offHours ? `${tName(tid)} 這個時段不在開放時間內（可能請假），請移動或取消` : undefined}
-                                draggable
-                                onDragStart={(e) => {
-                                  setDragId(a.id);
-                                  e.dataTransfer?.setData('text/plain', String(a.id));
-                                  if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
-                                }}
-                                onDragEnd={() => {
-                                  setDragId(null);
-                                  setDropKey(null);
-                                }}
-                                onClick={() => openAppt(a)}
-                              >
-                                <TeacherDot id={tid} teachers={st.teachers} />
-                                <span class="lno">{g?.no}</span>
-                                <span class="gname">{g?.name || `第 ${g?.no} 組`}</span>
-                                {offHours && <Icon name="alert" size={14} />}
-                                <span class="sr-only">
-                                  ，{dayLabel(d)} {t}，{tName(tid)}
-                                  {a.status === 'draft' ? '，草稿' : '，已發布'}
-                                  {offHours ? '，注意：不在老師的開放時段' : ''}
-                                </span>
-                              </button>
-                            );
-                          }
-                          const available = slot?.teachers.includes(tid);
-                          return (
-                            <button
-                              type="button"
-                              key={laneKey}
-                              class={`lane ${dropKey === laneKey ? 'drop' : ''}`}
-                              disabled={!available}
-                              onClick={() => openCell(d, t, tid)}
-                              onDragOver={(e) => {
-                                if (dragId === null) return;
-                                e.preventDefault();
-                                if (dropKey !== laneKey) setDropKey(laneKey);
-                              }}
-                              onDragLeave={() => setDropKey((k) => (k === laneKey ? null : k))}
-                              onDrop={(e) => {
-                                e.preventDefault();
-                                const a = st.appointments.find((x) => x.id === dragId);
-                                setDragId(null);
-                                setDropKey(null);
-                                if (a) assign({ group: a.group_id, teacher: tid, d, t, moveId: a.id });
-                              }}
-                            >
-                              <TeacherDot id={tid} teachers={st.teachers} />
-                              {wantFor(tid) > 0 ? (
-                                <span class="want">{wantFor(tid)} 組想要</span>
-                              ) : (
-                                <span class="faint">空檔</span>
-                              )}
-                              <span class="sr-only">
-                                ，{dayLabel(d)} {t}，{tName(tid)}
-                                {wantFor(tid) > 0 ? '，空檔' : ''}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    );
-                  }),
-                ])}
-              </div>
-            </div>
-            </>
-          )}
-          <ul class="legend">
-            {st.teachers
-              .filter((x) => x.active)
-              .map((x) => (
-                <li key={x.id}>
-                  <TeacherDot id={x.id} teachers={st.teachers} />
-                  {x.name}
-                </li>
-              ))}
-            <li>
-              <span class="sw" style={{ background: 'var(--ink)', borderColor: 'var(--ink)' }} />
-              已發布
-            </li>
-            <li>
-              <span class="sw" style={{ background: 'var(--accent-soft)', borderColor: 'var(--accent)', borderStyle: 'dashed' }} />
-              草稿（只有助教看得到）
-            </li>
-            <li>
-              <span class="sw none" />
-              空檔，點一下安排
-            </li>
-            <li>
-              <span class="sw" style={{ background: 'var(--accent-soft)', boxShadow: 'inset 0 0 0 2px var(--accent)' }} />
-              選取小組勾的時段
-            </li>
-          </ul>
-        </section>
+const STATE_TEXT: Record<RowState, (open: boolean) => string> = {
+  booked: () => '已預約',
+  cancelled: () => '已取消',
+  skipped: () => '這週不約',
+  holiday: () => '放假',
+  nofixed: () => '沒有固定時段',
+  waiting: (open) => (open ? '還沒回覆' : '沒有預約'),
+};
+const STATE_CHIP: Record<RowState, string> = { booked: 'ok', cancelled: 'danger', skipped: '', holiday: '', nofixed: 'warn', waiting: 'warn' };
 
-        <aside class="stack" aria-label="需求">
-          <div class="section-head">
-            <h2 class="title-s">需求 · {openReqs.length} 組</h2>
-            {focus !== null && (
-              <button type="button" class="link-btn small" onClick={() => setFocus(null)}>
-                清除選取
-              </button>
+function GroupRow({
+  r,
+  st,
+  open,
+  nowStamp,
+  tName,
+  room,
+  busy,
+  onSubstitute,
+  onReschedule,
+  onCancel,
+  onPlace,
+}: {
+  r: Row;
+  st: AdminState;
+  open: boolean;
+  nowStamp: string;
+  tName: (id: number) => string;
+  room: (id: number) => string;
+  busy: string | null;
+  onSubstitute: (a: Appointment) => void;
+  onReschedule: (a: Appointment) => void;
+  onCancel: (a: Appointment) => void;
+  onPlace: (r: Row) => void;
+}) {
+  const mins = st.settings.slot_minutes;
+  const req = st.requests.find((x) => x.group_id === r.g.id && x.status === 'open');
+  const a = r.session ?? r.cancelled;
+  const moved = a && r.fixed && (a.d !== r.fixed.d || a.t !== r.fixed.t);
+  const swapped = a && r.fixed && a.teacher_id !== r.fixed.teacher;
+  const past = a ? `${a.d} ${a.t}` < nowStamp : false;
+  const leave = a ? st.closures.find((c) => c.teacher_id === a.teacher_id && c.d === a.d) : undefined;
+  const offHours = r.session && !st.slots.some((s) => s.d === r.session!.d && s.t === r.session!.t && s.teachers.includes(r.session!.teacher_id));
+  return (
+    <section class="card stack" aria-label={groupName(st.groups, r.g.id)}>
+      <div class="row between wrap">
+        <span class="row" style={{ gap: '10px' }}>
+          <span class="gno">{r.g.no}</span>
+          <b>{r.g.name || `第 ${r.g.no} 組`}</b>
+        </span>
+        <span class={`chip ${STATE_CHIP[r.state]}`}>{STATE_TEXT[r.state](open)}</span>
+      </div>
+
+      <p class="small muted">
+        {r.fixed ? (
+          <>
+            固定時段：{dayLabel(r.fixed.d)} <span class="mono">{timeRange(r.fixed.t, mins)}</span> · {tName(r.fixed.teacher)}
+            {r.holiday ? `（${r.holiday}）` : ''}
+          </>
+        ) : (
+          <>
+            還沒有固定時段，到<a href={href('admin/groups')}>小組與邀請</a>設定
+          </>
+        )}
+      </p>
+
+      {a && (
+        <div class={`li ${a.status === 'cancelled' ? 'cancelled' : ''}`} style={{ borderRadius: 'var(--r)', border: '1px solid var(--line)' }}>
+          <div class="when">
+            <b>{a.t}</b>
+            <span>{dayLabel(a.d)}</span>
+          </div>
+          <div class="grow stack tight">
+            <span class="small row wrap" style={{ gap: '6px' }}>
+              <TeacherDot id={a.teacher_id} teachers={st.teachers} />
+              {tName(a.teacher_id)}
+              {swapped && <span class="chip accent">代班</span>}
+              {moved && <span class="chip accent">改期</span>}
+              {a.status === 'draft' && <span class="chip">草稿</span>}
+            </span>
+            {a.status === 'cancelled' ? (
+              <span class="tiny">
+                {a.cancelled_by} 取消{a.cancel_reason ? `：${a.cancel_reason}` : ''}
+              </span>
+            ) : (
+              <span class="tiny muted">
+                <Place value={room(a.teacher_id)} full />
+              </span>
             )}
           </div>
-          {requestsSorted.length === 0 && <Empty icon="users" title="這週還沒有任何需求" />}
-          {requestsSorted.map((r) => {
-            const g = gOf(r.group_id);
-            const have = countFor(r.group_id);
-            const target = Math.min(r.want, weekCap);
-            const hasDraft = drafts.some((a) => a.group_id === r.group_id);
-            const status =
-              r.status !== 'open' ? (
-                <span class="chip">已撤回</span>
-              ) : have >= target ? (
-                <span class={`chip ${hasDraft ? 'accent' : 'ok'}`}>{hasDraft ? '草稿' : '已排定'}</span>
-              ) : have > 0 ? (
-                <span class="chip accent">
-                  已排 {have}/{target}
-                </span>
-              ) : (
-                <span class="chip warn">待排</span>
-              );
-            const days = new Set(r.slots.map((s) => s.d)).size;
-            return (
-              <button type="button" key={r.id} class={`req ${focus === r.group_id ? 'on' : ''}`} onClick={() => setFocus(focus === r.group_id ? null : r.group_id)} aria-pressed={focus === r.group_id}>
-                <div class="row between">
-                  <span class="row" style={{ gap: '8px' }}>
-                    <span class="gno">{g?.no}</span>
-                    <b class="small">{g?.name || `第 ${g?.no} 組`}</b>
-                  </span>
-                  {status}
-                </div>
-                <span class="topic">{r.topic}</span>
-                <span class="prog clamp-2 pre">{r.progress}</span>
-                <span class="meta">
-                  想約 {minutesText(r.want * mins)}{pairsOf(r.group_id).length ? ` · 搭配 ${pairText(r.group_id)}` : ''} · 勾了 {r.slots.length} 格 / {days} 天 · {r.author} {agoText(r.updated_at, now)}
-                </span>
-                {focus === r.group_id && (
-                  <span class="stack tight">
-                    {slotLines(r.slots).map((l) => (
-                      <span class="tiny" key={l.d}>
-                        {l.label} <span class="mono">{l.times.join('、')}</span>
-                      </span>
-                    ))}
-                    {safeHref(r.link) && (
-                      <a class="tiny" href={safeHref(r.link)} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
-                        雲端資料夾 ↗
-                      </a>
-                    )}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-          {missing.length > 0 && (
-            <div class="card sunk tight stack tight">
-              <span class="small">
-                <b>還沒送出：</b>
-                {missing.map((g) => `第 ${g.no} 組`).join('、')}
-              </span>
-              <div>
-                <CopyBtn
-                  text={`提醒：${week.label || mdPad(week.start)} 的 Office Hour 預約在 ${deadlineText(week.deadline)} 截止，請在那之前到平台勾選可以的時段：${siteUrl()}`}
-                  label="複製提醒訊息"
-                />
-              </div>
+          {a.status === 'cancelled' ? <span class="chip danger">已取消</span> : past ? <span class="chip">已結束</span> : null}
+        </div>
+      )}
+
+      {r.session && !past && (leave || offHours) && (
+        <div class="notice warn">
+          <Icon name="alert" />
+          <span class="small">
+            {leave ? `${tName(r.session.teacher_id)} 這天請假${leave.reason ? `（${leave.reason}）` : ''}` : `不在 ${tName(r.session.teacher_id)} 的開放時段`}，請安排代班、改期或取消
+          </span>
+        </div>
+      )}
+
+      {req && (
+        <div class="stack tight">
+          <span class="title-s">{req.topic}</span>
+          {req.questions && (
+            <div class="qbox">
+              <span class="eyebrow">想問 PM 的問題</span>
+              <p class="pre small">{req.questions}</p>
             </div>
           )}
-          {cancelled.length > 0 && (
-            <details class="small">
-              <summary class="muted" style={{ cursor: 'pointer' }}>
-                本週已取消 {cancelled.length} 場
-              </summary>
-              <div class="stack tight" style={{ marginTop: '8px' }}>
-                {cancelled.map((a) => (
-                  <span key={a.id} class="muted">
-                    {groupName(st.groups, a.group_id)} {dayLabel(a.d)} {a.t}：{a.cancelled_by} 取消{a.cancel_reason ? `（${a.cancel_reason}）` : ''}
-                  </span>
-                ))}
-              </div>
-            </details>
+          <p class="pre small muted clamp-3">{req.progress}</p>
+          {safeHref(req.link) && (
+            <a class="small row" style={{ gap: '6px', width: 'fit-content' }} href={safeHref(req.link)} target="_blank" rel="noopener noreferrer">
+              <Icon name="external" size={15} />
+              雲端資料夾
+            </a>
           )}
-        </aside>
+          <span class="tiny faint">{req.author} 送出</span>
+        </div>
+      )}
+
+      {r.session && !past && (
+        <div class="row wrap">
+          <Btn size="sm" icon="users" loading={busy === 'move'} onClick={() => onSubstitute(r.session!)}>
+            代班
+          </Btn>
+          <Btn size="sm" icon="calendar" loading={busy === 'move'} onClick={() => onReschedule(r.session!)}>
+            改期
+          </Btn>
+          <Btn size="sm" variant="ghost" class="danger" loading={busy === 'remove'} onClick={() => onCancel(r.session!)}>
+            取消
+          </Btn>
+        </div>
+      )}
+      {!r.session && r.fixed && !r.holiday && r.fixed.d + ' ' + r.fixed.t >= nowStamp && (r.state === 'cancelled' || (r.state === 'waiting' && !open)) && (
+        <div>
+          <Btn size="sm" icon="plus" loading={busy === 'place'} onClick={() => onPlace(r)}>
+            排進固定時段
+          </Btn>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** Any hour of the week, for a time outside the PM's open hours. */
+function OtherTime({ start, onPick }: { start: string; onPick: (d: string, t: string) => void }) {
+  const days = [1, 2, 3, 4, 5, 6, 7].map((i) => dayOfWeek(start, i));
+  const hours = Array.from({ length: 15 }, (_, i) => `${String(8 + i).padStart(2, '0')}:00`);
+  const [d, setD] = useState(days[0]);
+  const [t, setT] = useState('10:00');
+  return (
+    <details>
+      <summary class="small muted" style={{ cursor: 'pointer' }}>
+        其他時間
+      </summary>
+      <div class="row wrap" style={{ marginTop: '10px', gap: '8px' }}>
+        <label class="sr-only" for="other-day">
+          日期
+        </label>
+        <select id="other-day" class="select" style={{ width: 'auto' }} value={d} onChange={(e) => setD((e.target as HTMLSelectElement).value)}>
+          {days.map((x) => (
+            <option key={x} value={x}>
+              {DOW[isoDow(x)]} {x.slice(5).replace('-', '/')}
+            </option>
+          ))}
+        </select>
+        <label class="sr-only" for="other-time">
+          開始時間
+        </label>
+        <select id="other-time" class="select" style={{ width: 'auto' }} value={t} onChange={(e) => setT((e.target as HTMLSelectElement).value)}>
+          {hours.map((x) => (
+            <option key={x} value={x}>
+              {x}
+            </option>
+          ))}
+        </select>
+        <Btn size="sm" onClick={() => onPick(d, t)}>
+          改到這個時間
+        </Btn>
       </div>
-    </main>
+    </details>
   );
 }
 
