@@ -1476,6 +1476,13 @@ ul.steps {
   display: grid;
   line-height: 1.35;
 }
+/* a session's time and day, which leave the topic more room on a phone */
+.li .when.short {
+  width: 68px;
+}
+.li .grow > .small {
+  text-wrap: pretty;
+}
 .li .when b {
   font-family: var(--mono);
   font-size: 15px;

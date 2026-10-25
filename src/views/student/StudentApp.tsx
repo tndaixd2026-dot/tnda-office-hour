@@ -527,15 +527,13 @@ function ApptRow({ a, mins, tz, now, onCancel }: { a: StudentAppointment; mins: 
   const cancelled = a.status === 'cancelled';
   return (
     <div class={`li ${cancelled ? 'cancelled' : ''} ${past && !cancelled ? 'past' : ''}`}>
-      <div class="when">
+      <div class="when short">
         <b>{a.t}</b>
         <span>{dayLabel(a.d)}</span>
       </div>
       <div class="grow stack tight">
-        <span class="small">
-          {a.topic ?? 'Office Hour'}
-          {a.teacher ? <span class="muted"> · {a.teacher}</span> : null}
-        </span>
+        <span class="small">{a.topic ?? 'Office Hour'}</span>
+        {a.teacher && <span class="tiny muted">{a.teacher}</span>}
         {cancelled && (
           <span class="tiny">
             {a.cancelled_by} 取消{a.cancel_reason ? `：${a.cancel_reason}` : ''}
