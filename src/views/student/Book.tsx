@@ -180,7 +180,7 @@ export function Book({ st, weekId, reload }: { st: StudentState; weekId: number;
       <main class="page">
         {head}
         <Empty icon="clock" title={!fixed ? '還沒有固定時段' : week.holiday ? `這週遇到${week.holiday}，停一次` : '這週現在不能預約'}>
-          {!fixed ? '助教設定好你們的固定時段後就能預約，有問題在 Discord 問助教' : '每次只開放下一週，上一週截止後就能預約'}
+          {!fixed ? '助教設定好你們的固定時段後就能預約，有問題在 Discord 問助教' : !week.open ? '這週暫停，有問題在 Discord 問助教' : '這週的預約已經截止，要調整請在 Discord 告訴助教'}
         </Empty>
       </main>
     );

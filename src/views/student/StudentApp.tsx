@@ -232,7 +232,7 @@ function Home({ st, setWeek, reload }: { st: StudentState; setWeek: (id: number)
               ? '可預約'
               : closed(w)
                 ? '沒有預約'
-                : '還沒開放';
+                : '還不能約';
 
   return (
     <main class="page enter">
@@ -315,7 +315,7 @@ function Home({ st, setWeek, reload }: { st: StudentState; setWeek: (id: number)
             你們的固定時段{fixed.teacher ? ` · ${fixed.teacher}` : ''}
           </p>
           <h1 class="title-l">{fixedText(fixed, mins)}</h1>
-          <p class="muted">每週六 20:00 前決定下週要不要約。要約就寫好題目、想問的問題、進度和雲端連結，送出就排定</p>
+          <p class="muted">每週要不要約，在前一週的週六 20:00 前決定，之後幾週也可以先約好。要約就寫好題目、想問的問題、進度和雲端連結，送出就排定</p>
           {firstBookable && (
             <div class="row wrap">
               <Btn variant="primary" size="lg" icon="arrow" onClick={() => go(`book/${firstBookable.id}`)}>
@@ -377,7 +377,7 @@ function Home({ st, setWeek, reload }: { st: StudentState; setWeek: (id: number)
               ) : closed(week) ? (
                 <span class="chip">已截止</span>
               ) : (
-                <span class="chip">還沒開放</span>
+                <span class="chip">還不能約</span>
               )}
             </div>
 
@@ -463,8 +463,8 @@ function Home({ st, setWeek, reload }: { st: StudentState; setWeek: (id: number)
               </div>
             ) : (
               weekAppts.length === 0 && (
-                <Empty icon="clock" title={!week.open ? '這週暫停' : closed(week) ? '這週沒有預約' : '還沒開放'}>
-                  {!week.open ? '有問題可以在 Discord 詢問助教' : closed(week) ? `每週的預約在${closeRuleText(st.settings)} 截止` : '每次只開放下一週，上一週截止後就能預約'}
+                <Empty icon="clock" title={!week.open ? '這週暫停' : closed(week) ? '這週沒有預約' : '還不能約'}>
+                  {!week.open ? '有問題可以在 Discord 詢問助教' : closed(week) ? `每週的預約在${closeRuleText(st.settings)} 截止` : '助教設定好固定時段後就能預約'}
                 </Empty>
               )
             )}

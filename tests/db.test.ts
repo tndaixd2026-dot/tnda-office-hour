@@ -623,15 +623,16 @@ describe('weekly booking', () => {
     expect(st.fixed).toEqual({ dow: 3, t: '10:00', teacher: 'Prolong', room: ROOM.prolong });
     expect(st.week_id).toBe(w7);
     expect(st.weeks[0]).toMatchObject({ label: 'W7', bookable: true, deadline: '2026-10-17 20:00', status: null, holiday: null });
-    expect(st.weeks[1]).toMatchObject({ label: 'W8', bookable: false }); // only next week is open
+    // every later week is open too, each until its own deadline
+    expect(st.weeks[1]).toMatchObject({ label: 'W8', bookable: true, deadline: '2026-10-24 20:00' });
+    expect(st.weeks.every((w: any) => w.bookable)).toBe(true);
   });
 
-  it("books next week's fixed slot at once, every field required", async () => {
+  it("books a week's fixed slot at once, every field required", async () => {
     await expectCode(book(g2, w7, { p_link: '' }), 'VALIDATION', 'link');
     await expectCode(book(g2, w7, { p_questions: ' ' }), 'VALIDATION', 'questions');
     await expectCode(book(g2, w7, { p_topic: '' }), 'VALIDATION', 'topic');
     await expectCode(book(g2, w7, { p_progress: '' }), 'VALIDATION', 'progress');
-    await expectCode(book(g2, w8), 'WEEK_NOT_YET');
     const r = await book(g2, w7);
     expect(r).toMatchObject({ status: 'open', topic: '感測器延遲', want: 1, slots: [{ d: '2026-10-21', t: '10:00' }] });
     const st = await db.call('oh_student_state', { p_token: g2 });
@@ -749,6 +750,21 @@ describe('weekly booking', () => {
     expect(m.html).toContain(ROOM.prolong);
     expect(m.html).toContain('叁式 ULTRACOMBOS One Hour a Week');
     expect(m.text).toContain('Prolong：' + ROOM.prolong);
+  });
+
+  it('books weeks ahead, each until its own deadline', async () => {
+    const w12 = await weekId(db, 'W12');
+    expect(await book(g1, w12)).toMatchObject({ status: 'open', slots: [{ d: '2026-11-24', t: '17:00' }] });
+    expect(await db.call('oh_booking_skip', { p_token: g7, p_week: w12 })).toMatchObject({ status: 'skipped' });
+    let st = await db.call('oh_student_state', { p_token: g1 });
+    expect(st.weeks.find((w: any) => w.id === w12)).toMatchObject({ status: 'open', booked: 1, bookable: true });
+    // after W7 closes the ahead booking stays, and stays editable until W12's own deadline
+    await db.setNow('2026-11-21T19:59:00+08:00');
+    st = await db.call('oh_student_state', { p_token: g1, p_week: w12 });
+    await book(g1, w12, { p_topic: '提前約好的', p_version: st.request.version });
+    await db.setNow('2026-11-21T20:00:00+08:00');
+    await expectCode(book(g1, w12, { p_version: st.request.version + 1 }), 'WEEK_LATE', '11/21（六）20:00');
+    await db.setNow(WED);
   });
 });
 

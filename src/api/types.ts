@@ -386,6 +386,38 @@ export interface MailRecipient {
   active: boolean;
 }
 
+export interface DiscordMessage {
+  content: string;
+  components: Array<{ type: number; components: Array<{ type: number; style: number; label: string; custom_id?: string; url?: string }> }>;
+}
+
+export interface DiscordGroup {
+  id: number;
+  no: number;
+  name: string;
+  webhook: boolean;
+  /** the channel was found from the webhook */
+  channel: boolean;
+  /** the bot can see the channel */
+  ready: boolean;
+  fixed: boolean;
+}
+
+export interface DiscordState {
+  clock: ClockInfo;
+  /** the bot's key is stored and its button presses come to the function */
+  ready: boolean;
+  name: string | null;
+  endpoint: string | null;
+  checked_at: string | null;
+  /** the week Friday's message is about */
+  week: { id: number; label: string; start: string; deadline: string } | null;
+  sample: DiscordMessage | null;
+  sample_group: number | null;
+  groups: DiscordGroup[];
+  posts: Array<{ id: number; group_no: number; week_id: number; week: string; posted_at: string; closed_at: string | null; status: Request['status'] | null }>;
+}
+
 export interface MailState {
   clock: ClockInfo;
   settings: { weekly: boolean; preview: boolean; remind: boolean; ta_email: string };

@@ -100,7 +100,8 @@ try {
       for (let g = 1; g <= 10; g++)
         for (let w = 1; w <= 40; w++) localStorage.setItem(`oh.draft.${g}.${w}`, JSON.stringify({ picks: [], want: 2, topic: '舊草稿', base: null }));
     });
-    // only the week that is open for booking says 可預約
+    // every later week is open too, each until its own deadline
+    check((await page.locator('.weeks .wk', { hasText: '可預約' }).count()) >= 2, 'later weeks should be open for booking too');
     await page.locator('.weeks .wk', { hasText: '可預約' }).first().click();
     await page.getByRole('button', { name: '預約這週' }).first().click();
     await page.getByText('你們的固定時段').waitFor();
@@ -249,6 +250,19 @@ try {
     await page.getByRole('complementary', { name: '管理選單' }).getByRole('link', { name: '設定' }).click();
     await page.getByRole('heading', { name: '課程與規則' }).first().waitFor();
     check((await page.getByLabel('截止的星期').inputValue()) === '6' && (await page.getByLabel('截止的時間').inputValue()) === '20:00', 'bookings should close on Saturday at 20:00');
+  });
+
+  await run('admin sees the Discord ask: setup, channels and a preview', async () => {
+    await page.getByRole('complementary', { name: '管理選單' }).getByRole('link', { name: 'Discord 詢問' }).click();
+    await page.getByRole('heading', { name: '每週五在各組頻道問要不要約' }).waitFor();
+    // the demo has no bot, so it shows how to set one up
+    await page.getByText('還沒連接').waitFor();
+    await page.getByText('到 Discord Developer Portal 建立新的 Application', { exact: false }).waitFor();
+    check((await page.locator('#d-groups').locator('xpath=../..').locator('.li').count()) === 7, 'every group should be listed');
+    await page.locator('.dc-msg', { hasText: 'Office Hour' }).waitFor();
+    check((await page.locator('.dc-msg .dc-btn').count()) >= 1, 'the preview should show the buttons');
+    await page.getByRole('complementary', { name: '管理選單' }).getByRole('link', { name: '設定' }).click();
+    await page.getByRole('heading', { name: '課程與規則' }).first().waitFor();
   });
 
   await run('admin changes a setting', async () => {

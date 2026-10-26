@@ -43,7 +43,7 @@ const MESSAGES: Record<string, string> = {
   WEEK_CLOSED: '這週已暫停預約',
   CONFLICT: '組員剛剛更新了預約',
   NO_FIXED_SLOT: '助教還沒設定你們的固定時段，請在 Discord 問助教',
-  WEEK_NOT_YET: '這週還沒開放，上一週截止後才能預約',
+  WEEK_NOT_YET: '這週還不能預約，請重新整理頁面',
   SLOT_TAKEN: '這個時段已經有別的場次，請在 Discord 告訴助教',
   HAS_APPOINTMENTS: '這週已經有排定的時段，請先取消時段再撤回需求',
   TEACHER_BUSY: '這位老師在這個時段已經有安排了',

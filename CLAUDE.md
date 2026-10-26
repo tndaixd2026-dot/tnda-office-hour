@@ -2,7 +2,7 @@
 
 TN0006「跨域數位製作實務」的 Office Hour 預約平台，名稱是「叁式 ULTRACOMBOS One Hour a Week」（`src/config.ts` 的 `APP_NAME` 和手機用的 `APP_SHORT_NAME`，另外寫在 `index.html`、`public/manifest.webmanifest`、`scripts/send-mail.mjs` 的寄件人名稱，以及信件頁首的 `app.mail_message`／`app.mail_remind`，改名時要新增 migration）。規則是每組有一個固定時段（業師、星期、時間，每次 60 分鐘），每週決定要不要用：送出就排定（設定裡 `slot_minutes` 60、每週上限 1、每天上限 1）。所有畫面即時同步。使用說明、架構圖、展示腳本在 `README.md`。
 
-每週的節奏：每次只開放下一週（`app.booking_week()`）；各組在**前一週的週六 20:00** 前按「預約這週」（`oh_booking_save`，題目、想問的問題、進度、雲端連結都必填，直接建立已確認的場次）或「這週不約」（`oh_booking_skip`，`requests.status = 'skipped'`）。截止（設定的 `close_dow`／`close_time`，`app.week_deadline()`）後不能再改（`WEEK_LATE`），已排定的場次在開始前 `cancel_hours` 小時可以自己取消。固定時段那天是全天休息日（`app.fixed_holiday()`）就停一次（`WEEK_HOLIDAY`）。業師臨時有事時，助教在排程頁「代班」「改期」「取消」（`oh_admin_move`、`oh_admin_remove`）；學生之後修改內容不會蓋掉助教的調整。**週日 18:00** 寄預覽到助教信箱，**週一 08:00** 寄信給收件人。週日 12:00 的審核提醒（`app.mail_remind`）已經停用，`lead_days` 也不用了。
+每週的節奏：之後的每一週都能先約，每週只看自己的截止時間（`app.week_bookable()`；`app.booking_week()` 是下一個還沒截止的週，學生畫面預設和 Discord 詢問用它）；各組在**前一週的週六 20:00** 前按「預約這週」（`oh_booking_save`，題目、想問的問題、進度、雲端連結都必填，直接建立已確認的場次）或「這週不約」（`oh_booking_skip`，`requests.status = 'skipped'`）。截止（設定的 `close_dow`／`close_time`，`app.week_deadline()`）後不能再改（`WEEK_LATE`），已排定的場次在開始前 `cancel_hours` 小時可以自己取消。固定時段那天是全天休息日（`app.fixed_holiday()`）就停一次（`WEEK_HOLIDAY`）。業師臨時有事時，助教在排程頁「代班」「改期」「取消」（`oh_admin_move`、`oh_admin_remove`）；學生之後修改內容不會蓋掉助教的調整。**週五 12:00** 機器人在各組的 Discord 頻道問下週要不要約，可以直接在 Discord 預約（表單）或不約，**週六 20:00** 截止後訊息改成結果。**週日 18:00** 寄預覽到助教信箱，**週一 08:00** 寄信給收件人。週日 12:00 的審核提醒（`app.mail_remind`）已經停用，`lead_days` 也不用了。
 
 老師端是同一個畫面：三位老師（Joseph、Prolong、Tim）和共用帳號「叁式」（`app.teachers.team = true`，給業師公司或老師助理）登入後都看到三位老師的全部場次。共用帳號不會被排進任何場次、不能有開放時段（`app.not_team()` trigger），行事曆包含所有老師的場次。
 
@@ -26,6 +26,7 @@ TN0006「跨域數位製作實務」的 Office Hour 預約平台，名稱是「�
 - `.secrets/`（已 gitignore）：`db-password.txt`、`admin-code.txt`、`project-ref.txt`。換電腦時用 AirDrop 這類離線方式搬，不要經過 Git、Email 或聊天。
 - 助教登入連結由使用者自己保管在 repo 外。
 - GitHub repo secret `SUPABASE_DB_PASSWORD`：資料庫密碼，給 GitHub Actions 推 migration 和寄信用。更換資料庫密碼時要一起更新（repo → Settings → Secrets and variables → Actions）。
+- GitHub repo secret `DISCORD_BOT_TOKEN`：Discord 每週詢問的機器人 Token；`SUPABASE_ACCESS_TOKEN`：部署 Edge Function `supabase/functions/discord` 用的 Supabase Access Token。都由使用者自己設定，沒有設定時對應的步驟會跳過。
 - GitHub repo secret `GMAIL_USER`、`GMAIL_APP_PASSWORD`：寄每週信的 Gmail 和它的應用程式密碼（不是登入密碼），由使用者自己設定。收件人的 Email 存在資料庫（`app.mail_recipients`），在後台「寄信通知」維護，不要寫進 repo。Actions 的紀錄是公開的，寄信腳本只能印主旨和數量，不能印 Email。
 - `.env.production` 裡的 Supabase publishable key 本來就是公開的（只能呼叫 `oh_*` 函式），可以 commit。
 
@@ -40,11 +41,13 @@ TN0006「跨域數位製作實務」的 Office Hour 預約平台，名稱是「�
 - 示範模式（`#/demo`）：在瀏覽器裡用 PGlite 跑**同一套** migration，再載入 `src/db/demo.sql`（日期以今天為基準）。
 - Discord：用 pg_net 非同步送出，並設 `allowed_mentions: {parse: []}`，學生寫的 @everyone 不會真的標記所有人。
 - 行事曆訂閱：`oh_calendar` 透過 PostgREST 的 `"*/*"` domain 回傳 `text/calendar`。GET 請求會把 `apikey` 當成函式參數傳進來，所以函式簽名必須保留 `apikey`。
+- Discord 每週詢問：`.github/workflows/discord.yml` 執行 `scripts/discord-ask.mjs`（週五 12:00 `ask`、週六 20:01 `close`，手動可選 `setup`）。腳本每次都先做設定：從 `GET /applications/@me` 讀出 Public Key 存進 `app.discord_bot`，把機器人的 Interactions Endpoint 設成 Edge Function（只在原本是空的時候設，不搶別的服務），從各組的 Webhook 查出頻道（`groups.discord_channel`、`discord_ready`）。訊息內容是 `app.discord_message`，按鈕和表單由 `supabase/functions/discord`（驗證 Ed25519 簽章，`handler.ts` 不依賴執行環境、`tests/discord-function.test.ts` 直接測它）交給 `app.discord_interaction`，用 `app.booking_save`／`app.booking_skip` 預約，規則和網站相同。「這週不約」按鈕帶著畫出訊息時的版本，舊訊息上按只會更新訊息。Edge Function 由 `deploy.yml` 的 `migrate` job 用 `SUPABASE_ACCESS_TOKEN` 部署（`--use-api`，關閉 JWT 檢查，`supabase/config.toml` 的 `[functions.discord]`）。
 - 每週寄信：`.github/workflows/mail.yml` 執行 `scripts/send-mail.mjs`（用 `SUPABASE_DB_PASSWORD` 連 pooler，用 Gmail SMTP 寄）。信的內容全部由 `app.mail_outbox`／`app.mail_message` 在資料庫產生，後台預覽（`oh_admin_mail_preview`）和實際寄出的是同一份；`app.mail_log` 防止同一週重複寄（`FORCE=1` 才會再寄）。本機試跑：`DATABASE_URL=… KIND=weekly MAIL_TEST=1 node scripts/send-mail.mjs`。
 
 | 位置 | 內容 |
 |---|---|
-| `supabase/migrations/` | 資料表、API 函式、Discord、登入期限、私有即時頻道、行事曆、名字登入與學生名單、TD 課表、單元與類型比例、老師共用畫面、每週截止、每週寄信、固定時段與業師討論室 |
+| `supabase/migrations/` | 資料表、API 函式、Discord、登入期限、私有即時頻道、行事曆、名字登入與學生名單、TD 課表、單元與類型比例、老師共用畫面、每週截止、每週寄信、固定時段與業師討論室、提前預約、Discord 每週詢問 |
+| `supabase/functions/discord/` | Discord 按鈕和表單的 Edge Function（Deno，有自己的 `deno.json`） |
 | `supabase/seed.sql` | 課程初始資料 |
 | `src/db/sql.ts` | 示範模式的 bootstrap 和 `MIGRATIONS` 清單 |
 | `src/api/` | `cloud.ts`（Supabase）和 `demo.ts`（PGlite）實作同一個 `Engine` 介面 |
@@ -53,7 +56,7 @@ TN0006「跨域數位製作實務」的 Office Hour 預約平台，名稱是「�
 | `src/lib/` | 時間計算、閃身步排程法（舊制，最大流）、ICS／CSV 匯出、TD 課表分組（`lessons.ts`） |
 | `src/ui/`、`src/styles/app.css` | 元件、對話框、圖示、toast、樣式 |
 | `tests/` | Vitest；資料庫規則用 PGlite 執行真正的 SQL |
-| `scripts/` | E2E、axe 掃描、雲端檢查、本機重置、學期重置、每週寄信（`send-mail.mjs`） |
+| `scripts/` | E2E、axe 掃描、雲端檢查、本機重置、學期重置、每週寄信（`send-mail.mjs`）、Discord 每週詢問（`discord-ask.mjs`） |
 
 ## 修改流程
 
@@ -84,7 +87,7 @@ TN0006「跨域數位製作實務」的 Office Hour 預約平台，名稱是「�
 
 - **開學前**：
   1. 確認 Supabase 專案沒有暫停。如果暫停了，到後台按 Resume（免費）。
-  2. 執行 `gh workflow enable keepalive.yml` 和 `gh workflow enable mail.yml`。公開 repo 連續 60 天沒有 commit 時，GitHub 會停用排程，而且停用後不會自己恢復。
+  2. 執行 `gh workflow enable keepalive.yml`、`gh workflow enable mail.yml` 和 `gh workflow enable discord.yml`。公開 repo 連續 60 天沒有 commit 時，GitHub 會停用排程，而且停用後不會自己恢復。
   3. 新學期要清空紀錄時，**先問過使用者**，再執行 `scripts/fresh-start.sql`。執行後所有舊連結都會失效，學生名單也會清空，要請助教重新填。TD 專班課表不會被清掉，要在後台「TD 課表」用匯入換掉。
 - Supabase 免費專案閒置 7 天就會暫停，學期中有人使用就不會。暫停前一週和暫停當下，Supabase 都會寄信給組織擁有者。
 

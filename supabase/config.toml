@@ -386,6 +386,11 @@ deno_version = 2
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
+# The Discord bot's interactions endpoint: Discord signs its requests, so
+# there is no Supabase JWT to check.
+[functions.discord]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327

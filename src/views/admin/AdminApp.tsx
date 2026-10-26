@@ -8,6 +8,7 @@ import { Board } from './Board';
 import { CalendarPage } from './CalendarPage';
 import { LessonsAdmin } from './LessonsAdmin';
 import { MailPage } from './MailPage';
+import { DiscordPage } from './DiscordPage';
 import { GroupsPage, TeachersPage } from './People';
 import { Overview } from './Overview';
 import { SettingsPage } from './SettingsPage';
@@ -19,6 +20,7 @@ const NAV: Array<{ id: string; label: string; icon: IconName }> = [
   { id: 'teachers', label: '老師', icon: 'user' },
   { id: 'calendar', label: '時段與週次', icon: 'calendar' },
   { id: 'mail', label: '寄信通知', icon: 'send' },
+  { id: 'discord', label: 'Discord 詢問', icon: 'chat' },
   { id: 'td', label: 'TD 課表', icon: 'layers' },
   { id: 'settings', label: '設定', icon: 'settings' },
 ];
@@ -51,6 +53,9 @@ export function AdminApp({ route }: { route: string[] }) {
       break;
     case 'mail':
       body = <MailPage />;
+      break;
+    case 'discord':
+      body = <DiscordPage />;
       break;
     default:
       body = <Board weekParam={route[1] === 'board' && route[2] ? Number(route[2]) || null : null} />;

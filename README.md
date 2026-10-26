@@ -23,6 +23,8 @@ TN0006「一場體驗如何發生：跨域數位製作實務」的 Office Hour �
 
 **老師看同一個畫面。** 三位老師和共用帳號「叁式」（給業師公司或老師助理用）登入後看到的是同一個畫面：這週和下週的一覽表（日期 × 老師），可以只看某一位，每一場的題目、進度和資料都在下面。訂閱一次行事曆之後，連網站都不用開：新的場次、異動、取消會自動出現在 Google 日曆／Apple 行事曆裡。共用帳號的行事曆包含三位老師的全部場次，不會被排進任何場次。
 
+**每週五在各組的 Discord 頻道問要不要約。** 機器人在每組頻道貼出下週的固定時段，組員直接在 Discord 按「預約這週」（跳出表單填題目、想問的問題、進度和雲端連結，送出就排定）或「這週不約」，不用打開網站。週六 20:00 截止後，訊息會改成結果。
+
 **每週一 08:00 自動寄信。** 收件人在後台「寄信通知」設定，每個人可以勾選要收哪幾位老師的場次。信裡每一場都有「加到 Google 日曆」按鈕和業師的討論室，最上面還有一鍵訂閱全部場次的按鈕。助教信箱會先在週日 18:00 收到預覽。
 
 ## 一學期的用法（助教）
@@ -33,8 +35,9 @@ TN0006「一場體驗如何發生：跨域數位製作實務」的 Office Hour �
 4. **時段與週次**：確認老師的開放時段、國定假日、哪幾週開放預約。
 5. **寄信通知**：新增收件人（三位老師、公司信箱、老師助理…），勾選每個人要收哪幾位老師的場次，填上助教信箱。第一次使用前要先完成 Gmail 設定（見下方「每週寄信」）。
 6. 每週的節奏：
-   - **截止前（每次只開放下一週）** 各組按「預約這週」（題目、想問的問題、進度、雲端連結都要填）就直接排進固定時段，或按「這週不約」。**排程** 頁列出每組的狀態，還沒回覆的組可以一鍵複製提醒訊息。
-   - **週六 20:00** 下一週的預約截止，學生之後不能再修改或改成不約；已排定的場次在開始前 24 小時都可以自己取消。
+   - **截止前** 各組按「預約這週」（題目、想問的問題、進度、雲端連結都要填）就直接排進固定時段，或按「這週不約」。之後的每一週都可以先約好，每週只看自己的截止時間（前一週的週六 20:00）。**排程** 頁列出每組的狀態，還沒回覆的組可以一鍵複製提醒訊息。
+   - **週五 12:00** 機器人在每組的 Discord 頻道問下週要不要約（見下方「Discord 每週詢問」），組員可以直接在 Discord 預約或不約。
+   - **週六 20:00** 下一週的預約截止，學生之後不能再修改或改成不約；Discord 的訊息改成結果。已排定的場次在開始前 24 小時都可以自己取消。
    - **業師臨時有事**：在 **排程** 頁那一場按「代班」（換一位業師，時間不變）、「改期」（列出這位業師的空檔，沒有固定組的時段標成備案）或「取消」（寫原因給這組）。學生和業師的畫面會立刻更新；有連結 Discord 的組別會自動收到通知。
    - **週日 18:00** 助教信箱收到預覽，確認週一要寄出的內容。
    - **週一 08:00** 每位收件人收到這週的場次。
@@ -85,7 +88,8 @@ flowchart LR
 - **即時同步。** 每次寫入都會在 `oh-sync` 頻道廣播「哪張表變了」，只有表名，不含任何資料；客戶端收到後透過 API 重新取得自己有權看的資料。斷線時還有切回分頁、恢復網路、每分鐘輪詢三層保險。
 - **示範模式跑的是同一套 SQL。** 用 [PGlite](https://pglite.dev)（編譯成 WebAssembly 的 Postgres）在瀏覽器裡建立完整資料庫，執行與正式環境完全相同的 migration。引擎從 jsDelivr 下載（約 2 秒），並用建置時記錄的 SHA-256 驗證；失敗時改用網站自帶的備份。
 - **行事曆訂閱也是同一套 SQL。** `oh_calendar` 直接由 PostgREST 以 `text/calendar` 回應（`"*/*"` media type handler），每位老師、每一組各有一條可作廢的私密網址，不需要另外的伺服器。TD 專班課表的 `oh_lessons_calendar` 用同一個方法，但是公開的，所有人共用一條網址。
-- **固定時段，送出就排定。** 每組的業師、星期、時間存在 `app.groups`；學生按「預約這週」時 `oh_booking_save` 直接在固定時段建立已確認的場次，「這週不約」由 `oh_booking_skip` 記下並拿掉那週的場次。每次只開放下一週（`app.booking_week()`），固定時段那天放假就停一次。助教的代班、改期、取消改的是同一筆場次，學生之後修改內容也不會蓋掉。
+- **固定時段，送出就排定。** 每組的業師、星期、時間存在 `app.groups`；學生按「預約這週」時 `oh_booking_save` 直接在固定時段建立已確認的場次，「這週不約」由 `oh_booking_skip` 記下並拿掉那週的場次。兩者都轉給 `app.booking_save`／`app.booking_skip`，Discord 的按鈕走的是同一套規則。之後的每一週都能先約，每週只看自己的截止時間（`app.week_bookable()`），固定時段那天放假就停一次。助教的代班、改期、取消改的是同一筆場次，學生之後修改內容也不會蓋掉。
+- **Discord 每週詢問。** `scripts/discord-ask.mjs`（GitHub Actions）用機器人的 Token 發訊息，訊息內容由資料庫的 `app.discord_message` 產生；按鈕和表單送到 Supabase Edge Function `supabase/functions/discord`，它只驗證 Discord 的簽章，再交給資料庫的 `app.discord_interaction` 回應。每組的頻道從那組連結的 Webhook 查出來，不用另外設定。
 - **每位業師一間討論室。** 每位老師有自己的 Google Meet 連結（`app.teachers.room`），學生、老師、行事曆和每週的信都顯示那一場業師的討論室，所以同一時段可以有好幾組。
 - **閃身步排程法（舊制）。** 改成固定時段之前，學生勾選可以的時段，再用最大流排程（`src/lib/scheduler.ts`），現在畫面上已經不用了。
 
@@ -104,7 +108,7 @@ flowchart LR
 ```bash
 npm install
 npm run dev          # http://localhost:5173（沒有 .env.local 時只能用示範模式）
-npm test             # 資料庫 API、排程演算法、Discord 通知、行事曆、TD 課表、寄信：125 項
+npm test             # 資料庫 API、排程演算法、Discord 通知與每週詢問、行事曆、TD 課表、寄信：154 項
 npm run build && npx vite preview --port 4173
 npm run e2e -- http://localhost:4173/   # 真實瀏覽器跑三種角色（示範模式）
 ```
@@ -149,10 +153,24 @@ psql "<資料庫連線字串>" -f scripts/fresh-start.sql
 
 紀錄是公開的（公開 repo），所以只印主旨和數量，不印 Email。
 
+### Discord 每週詢問
+
+`.github/workflows/discord.yml` 每週五 11:38 和週六 19:38（台北時間）啟動，`scripts/discord-ask.mjs` 等到 12:00／20:01 才動作：週五在每組的頻道貼出下週的固定時段和按鈕（每組每週一則），週六截止後把訊息改成結果、拿掉按鈕。組員按「預約這週」會跳出 Discord 的表單（題目、想問的問題、進度、雲端連結，可以帶出上次填的內容），送出就排定；按「這週不約」就記下來。訊息上的「這週不約」記得它是什麼時候的狀態：組員在網站上改過之後，按舊訊息上的按鈕只會把訊息更新成現在的樣子，不會蓋掉。後台「Discord 詢問」可以看機器人狀態、每組頻道、訊息預覽和發送紀錄。
+
+第一次使用前（只要做一次）：
+
+1. 到 <https://discord.com/developers/applications> 按 New Application（名稱例如 Office Hour）。請用新的 Application，不要和其他服務共用。在 Bot 頁按 Reset Token，複製 Token。
+2. 在 OAuth2 → URL Generator 勾選 `bot`，權限勾 View Channels 和 Send Messages，打開產生的網址，把機器人加進課程的伺服器。
+3. 在每組的頻道（或整個分類）的權限加入這個機器人，讓它看得到、能發言。
+4. GitHub repo → Settings → Secrets and variables → Actions，新增 `DISCORD_BOT_TOKEN`（剛剛的 Token）和 `SUPABASE_ACCESS_TOKEN`（Supabase → Account → Access Tokens 產生，用來部署 Edge Function）。
+5. Actions →「Test and deploy」→ Run workflow（部署 Edge Function），完成後再執行「Discord weekly ask」，選 `setup`。腳本會從 Discord 讀出機器人的 Public Key 存進資料庫，把機器人的 Interactions Endpoint 設成 Edge Function（Discord 會當場驗證），再從各組的 Webhook 找出頻道。後台「Discord 詢問」顯示「已連接」就完成了。想先試一組時，選 `ask`、在 `only` 填組別編號。
+
+紀錄是公開的，所以只印組別編號、數量和 Discord 的狀態碼，不印 Token、Webhook 或訊息內容。
+
 ### 開學前檢查
 
 1. 打開 Supabase 後台，確認專案沒有暫停。如果暫停了，按 Resume 恢復（免費）。
-2. 到 GitHub repo 的 Actions，「Keep database awake」和「Weekly email」如果顯示已停用就按 Enable。公開 repo 連續 60 天沒有 commit 時，GitHub 會自動停用排程。
+2. 到 GitHub repo 的 Actions，「Keep database awake」「Weekly email」「Discord weekly ask」如果顯示已停用就按 Enable。公開 repo 連續 60 天沒有 commit 時，GitHub 會自動停用排程。
 
 ### 部署
 
@@ -164,10 +182,10 @@ psql "<資料庫連線字串>" -f scripts/fresh-start.sql
 |---|---|---|
 | GitHub Pages | 網站 | 公開 repo 免費 |
 | GitHub Actions | 自動測試、資料庫 migration、部署、每日喚醒 | 公開 repo 不限分鐘數 |
-| Supabase | 資料庫、API、即時同步、Discord 通知 | Free 方案（組織沒有綁定任何付款方式，不可能產生費用） |
+| Supabase | 資料庫、API、即時同步、Discord 通知、Discord 按鈕的 Edge Function | Free 方案（組織沒有綁定任何付款方式，不可能產生費用；Edge Function 每月 50 萬次） |
 | jsDelivr | 示範模式的資料庫引擎 | 免費 |
 | Google Fonts | Noto Sans TC、IBM Plex Mono | 免費 |
-| Discord Webhook | 自動通知 | 免費 |
+| Discord Webhook、Discord 機器人 | 自動通知、每週詢問 | 免費 |
 | Gmail | 每週一寄給老師的信 | 免費（每天上限 500 封） |
 
 Supabase 免費方案提供 500 MB 資料庫、每月 5 GB 流量、200 個同時連線。一門課約 7 組、40 人，一整學期的資料量大約只有幾 MB，連上限的百分之一都不到。免費專案閒置 7 天會暫停，所以 GitHub Actions 每天會呼叫一次 API 讓它保持運作。即使暫停，Supabase 也會在暫停前一週和暫停當下寄信給組織擁有者，暫停後至少 90 天內都能在後台免費恢復，資料都還在。
@@ -175,13 +193,14 @@ Supabase 免費方案提供 500 MB 資料庫、每月 5 GB 流量、200 個同�
 ## 專案結構
 
 ```
-supabase/migrations/   資料表、API 函式、Discord 通知、登入期限、名字登入、TD 課表
+supabase/migrations/   資料表、API 函式、Discord 通知與每週詢問、登入期限、名字登入、TD 課表
+supabase/functions/    discord：Discord 按鈕和表單的 Edge Function（驗證簽章後交給資料庫）
 supabase/seed.sql      課程初始資料（小組、老師、開放時段、W7–W18）
 src/api/               雲端（Supabase）與示範（PGlite）兩種引擎，同一個介面
 src/views/             student / teacher / admin / lessons（TD 課表公開頁）/ Welcome
 src/lib/scheduler.ts   閃身步排程法（最大流）
 tests/                 Vitest：資料庫規則、排程、示範資料、Discord、TD 課表
-scripts/               端對端測試、雲端安全檢查、PGlite 資產準備
+scripts/               端對端測試、雲端安全檢查、PGlite 資產準備、每週寄信、Discord 每週詢問
 ```
 
 ## 三分鐘展示腳本
