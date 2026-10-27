@@ -64,9 +64,9 @@ describe('Discord weekly ask', () => {
     const due = Math.floor(Date.parse('2026-10-17T20:00:00+08:00') / 1000);
     expect(m.payload.content).toBe(
       `## 📅 W7 要約 Office Hour 嗎？\n### 10/21（三）10:00–11:00\n第 2 組「看到太陽就知道完蛋了」 · Prolong\n⏰ 請在 **10/17（六）20:00** 前決定（<t:${due}:R>）\n` +
-        '-# 要約就按「預約這週」，填好題目、想問的問題、目前進度和雲端資料夾連結，送出就排定',
+        '-# 按「要預約」填好題目、想問的問題、目前進度和雲端資料夾連結，送出就排定',
     );
-    expect(labels(m.payload)).toEqual(['預約這週', '這週不約', '打開網站']);
+    expect(labels(m.payload)).toEqual(['要預約', '不預約', '打開網站']);
     expect(m.payload.components[0].components[0].custom_id).toBe(`oh:book:${w7}`);
     expect(m.payload.allowed_mentions).toEqual({ parse: [] });
     for (const r of out) await db.sql('select app.discord_posted($1, $2, $3, $4)', [r.group_id, r.week_id, r.channel_id, `90000000000000000${r.group_no}`]);
@@ -91,9 +91,9 @@ describe('Discord weekly ask', () => {
     expect(r.type).toBe(7);
     expect(r.data.content).toBe(
       '## ✅ W7 已預約 Office Hour\n### 10/21（三）10:00–11:00\n第 2 組「看到太陽就知道完蛋了」 · Prolong · 🔗 [進入討論室](<https://meet.google.com/gtj-tcpu-wmu>)\n' +
-        '> 💬 **感測器延遲**\n-# 小晴 填的 · 10/17（六）20:00 前都可以修改或改成這週不約',
+        '> 💬 **感測器延遲**\n-# 小晴 填的 · 10/17（六）20:00 前都可以修改或改成不預約',
     );
-    expect(labels(r.data)).toEqual(['修改內容', '這週不約', '打開網站']);
+    expect(labels(r.data)).toEqual(['修改內容', '不預約', '打開網站']);
     // the same booking as on the site: confirmed at once, under the nickname
     const st = await db.call('oh_student_state', { p_token: g2 });
     expect(st.request).toMatchObject({ status: 'open', topic: '感測器延遲', author: '小晴', link: fields.link });
@@ -127,15 +127,15 @@ describe('Discord weekly ask', () => {
   it('skips the week, and books it after all', async () => {
     let r = await press(4, `oh:skip:${w7}:0`);
     expect(r.type).toBe(7);
-    expect(r.data.content).toBe('## W7 這週不約\n10/22（四）10:00–11:00 不排討論\n-# 小晴 決定的 · 10/17（六）20:00 前都可以改成預約');
-    expect(labels(r.data)).toEqual(['改成預約', '打開網站']);
+    expect(r.data.content).toBe('## W7 這週不約\n10/22（四）10:00–11:00 不排討論\n-# 小晴 決定的 · 10/17（六）20:00 前都可以改成要預約');
+    expect(labels(r.data)).toEqual(['要預約', '打開網站']);
     const form = await press(4, `oh:book:${w7}`);
     expect(form.data.custom_id).toMatch(new RegExp(`^oh:save:${w7}:[1-9]`));
     r = await submit(4, form.data.custom_id, fields);
     expect(r.data.content).toContain('已預約');
     // a booked group can skip too: its session goes away
     const shown = (await db.one('select app.discord_message($1, $2) as m', [ids[2], w7])).m;
-    const skipButton = shown.components[0].components.find((b: any) => b.label === '這週不約');
+    const skipButton = shown.components[0].components.find((b: any) => b.label === '不預約');
     r = await press(2, skipButton.custom_id);
     expect(r.data.content).toContain('這週不約');
     expect((await db.call('oh_student_state', { p_token: g2 })).appointments).toEqual([]);
@@ -144,7 +144,7 @@ describe('Discord weekly ask', () => {
   it("only redraws a message that no longer shows what the group decided", async () => {
     // Friday's message still asks group 6, but a member booked on the site since
     const asked = (await db.one('select app.discord_message($1, $2) as m', [ids[6], w7])).m;
-    const stale = asked.components[0].components.find((b: any) => b.label === '這週不約').custom_id;
+    const stale = asked.components[0].components.find((b: any) => b.label === '不預約').custom_id;
     expect(stale).toBe(`oh:skip:${w7}:0`);
     const g6 = await join(db, (await db.codes()).groups[6], 'F');
     await db.call('oh_booking_save', { p_token: g6, p_week: w7, p_topic: '網站上約的', p_questions: 'q', p_progress: 'p', p_link: fields.link });

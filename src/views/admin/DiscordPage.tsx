@@ -10,7 +10,7 @@ import { ErrorState } from '../student/StudentApp';
 const STATUS: Record<string, string> = { open: '已預約', skipped: '這週不約' };
 const KIND: Record<string, string> = { ask: '詢問', summary: '下週結果', today: '當天提醒' };
 const PLAN: Array<[string, string]> = [
-  ['週五 08:00', '問下週要不要約。按「預約這週」會跳出表單，填好題目、想問的問題、進度和雲端連結送出就排定；按「這週不約」就記下來'],
+  ['週五 08:00', '問下週要不要約。按「要預約」會跳出表單，填好題目、想問的問題、進度和雲端連結送出就排定；按「不預約」就記下來'],
   ['週六 20:00', '截止，詢問改成結果，按鈕拿掉'],
   ['週日 08:00', '告訴各組下週的結果，有沒有約都會發'],
   ['當天 08:00', '提醒當天有場次的組：時間、業師、討論室和題目'],
