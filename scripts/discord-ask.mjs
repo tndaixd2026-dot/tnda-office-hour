@@ -1,23 +1,29 @@
-// Asks each group in its own Discord channel about the coming week; run by
-// .github/workflows/discord.yml.
+// Posts the weekly Office Hour messages in each group's own Discord
+// channel; run by .github/workflows/discord.yml.
 //
 //   KIND=setup  connect the bot: store its public key, point its button
 //               presses at supabase/functions/discord, and find each group's
 //               channel (from the group's webhook) and whether the bot sees it
+//   KIND=morning  setup, then the 08:00 messages: every day, a reminder to
+//               each group with a session today; on Friday also the question
+//               (ask), on Sunday also next week's outcome (summary)
 //   KIND=ask    setup, then each group's message about the next open week,
 //               with the buttons to book or skip it (once per group and week)
+//   KIND=summary  setup, then each group's outcome for next week
+//   KIND=today  setup, then a reminder to each group with a session today
 //   KIND=refresh  setup, then redraw the messages still open as they stand
 //               now (after a change on the site, or to the message's layout)
 //   KIND=close  setup, then rewrite the messages of the weeks that have
 //               closed: the outcome, no buttons
-//   ONLY=2      ask just group 2 (to try it out)
+//   ONLY=2      post to group 2 only (to try it out)
 //   DISCORD_BOT_TOKEN                   the bot's token
 //   SUPABASE_DB_PASSWORD, POOLER_HOST   or DATABASE_URL directly
-//   SEND_AT=12:00  wait for this time in Taipei first (at most an hour)
-//   FORCE=1        ask again even if this week's message already went out
+//   SEND_AT=08:00  wait for this time in Taipei first (at most an hour)
+//   FORCE=1        post again even if the message already went out
 //   DRY_RUN=1      say what would be sent, send nothing
 //
-// The messages are written by app.discord_message in the database. The
+// The messages are written by app.discord_message, app.discord_summary and
+// app.discord_today_message in the database; each goes out once. The
 // repository and these logs are public: they show group numbers, counts
 // and Discord's status codes, never the token, a webhook or a message.
 import { readFileSync } from 'node:fs';
@@ -25,7 +31,7 @@ import pg from 'pg';
 
 const API = 'https://discord.com/api/v10';
 const on = (v) => v === '1' || v === 'true';
-const kind = ['ask', 'refresh', 'close'].includes(process.env.KIND) ? process.env.KIND : 'setup';
+const kind = ['morning', 'ask', 'summary', 'today', 'refresh', 'close'].includes(process.env.KIND) ? process.env.KIND : 'setup';
 const dry = on(process.env.DRY_RUN);
 const force = on(process.env.FORCE);
 const only = /^\d+$/.test(process.env.ONLY?.trim() ?? '') ? Number(process.env.ONLY) : null;
@@ -173,7 +179,7 @@ for (const g of (await db.query('select * from app.discord_webhooks()')).rows) {
 console.log(`channels: the bot sees ${seen}${unseen.length ? `, not group ${unseen.join(', ')}` : ''}`);
 if (unseen.length) console.log(`::warning::機器人看不到第 ${unseen.join('、')} 組的頻道：請在那些頻道的權限加入機器人（檢視頻道、傳送訊息）`);
 
-// ---- ask or close ----
+// ---- post, redraw or close ----
 if (process.env.SEND_AT && !dry && kind !== 'setup') {
   const wait = untilTaipei(process.env.SEND_AT);
   if (wait > 0 && wait <= 3600_000) {
@@ -182,29 +188,50 @@ if (process.env.SEND_AT && !dry && kind !== 'setup') {
   }
 }
 
-if (kind === 'ask') {
+let signedIn = false;
+/** Posts each row's message, and once Discord has it, records it with `noted`. */
+async function post(rows, what, noted) {
+  let sent = 0;
+  for (const r of rows) {
+    if (dry) {
+      console.log(`第 ${r.group_no} 組：would post the ${what}`);
+      continue;
+    }
+    if (!signedIn) {
+      signedIn = true;
+      if (!(await signIn())) console.log('::warning::Could not sign the bot in to the Discord gateway; posting anyway');
+    }
+    const res = await discord('POST', `/channels/${r.channel_id}/messages`, r.payload);
+    if (res.ok) {
+      await noted(r, res.data.id);
+      sent++;
+    } else {
+      console.error(`::error::第 ${r.group_no} 組：Discord 沒有收下訊息（${what}，${why(res)}）`);
+      failed++;
+    }
+  }
+  console.log(`${what}: posted ${sent} of ${rows.length}`);
+}
+
+const dow = (await db.query('select extract(isodow from app.today())::int as d')).rows[0].d;
+const note = (k) => (r, id) => db.query('select app.discord_noted($1, $2, $3, $4, $5)', [k, r.group_id, r.on_date, r.channel_id, id]);
+
+if (kind === 'today' || kind === 'morning') {
+  await post((await db.query('select * from app.discord_today_outbox($1, $2)', [force, only])).rows, 'day reminder', note('today'));
+}
+
+if (kind === 'summary' || (kind === 'morning' && dow === 7)) {
+  await post((await db.query('select * from app.discord_summary_outbox($1, $2)', [force, only])).rows, 'week summary', note('summary'));
+}
+
+if (kind === 'ask' || (kind === 'morning' && dow === 5)) {
   if (!registered && !dry) {
     console.error('::error::Not asking: the buttons would not work until the bot is connected (see above)');
     process.exit(1);
   }
-  const rows = (await db.query('select * from app.discord_outbox($1, $2)', [force, only])).rows;
-  if (rows.length && !dry && !(await signIn())) console.log('::warning::Could not sign the bot in to the Discord gateway; posting anyway');
-  let sent = 0;
-  for (const r of rows) {
-    if (dry) {
-      console.log(`第 ${r.group_no} 組：would ask (${r.payload.components[0]?.components.length ?? 0} buttons)`);
-      continue;
-    }
-    const res = await discord('POST', `/channels/${r.channel_id}/messages`, r.payload);
-    if (res.ok) {
-      await db.query('select app.discord_posted($1, $2, $3, $4)', [r.group_id, r.week_id, r.channel_id, res.data.id]);
-      sent++;
-    } else {
-      console.error(`::error::第 ${r.group_no} 組：Discord 沒有收下訊息（${why(res)}）`);
-      failed++;
-    }
-  }
-  console.log(`asked ${sent} of ${rows.length} groups`);
+  await post((await db.query('select * from app.discord_outbox($1, $2)', [force, only])).rows, 'question', (r, id) =>
+    db.query('select app.discord_posted($1, $2, $3, $4)', [r.group_id, r.week_id, r.channel_id, id]),
+  );
 }
 
 if (kind === 'refresh') {

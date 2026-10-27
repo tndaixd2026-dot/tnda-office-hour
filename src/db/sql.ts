@@ -34,6 +34,7 @@ import weeklyFixedSlot from '../../supabase/migrations/20261025000031_weekly_fix
 import bookAhead from '../../supabase/migrations/20261026000032_book_ahead.sql?raw';
 import discordAsk from '../../supabase/migrations/20261026000033_discord_ask.sql?raw';
 import discordFormat from '../../supabase/migrations/20261027000034_discord_format.sql?raw';
+import discordReminders from '../../supabase/migrations/20261027000035_discord_reminders.sql?raw';
 import seed from '../../supabase/seed.sql?raw';
 
 // Supabase provides these roles and the realtime schema; a bare Postgres
@@ -47,5 +48,5 @@ create function realtime.send(payload jsonb, event text, topic text, private boo
 returns void language sql as $$ select pg_notify('oh_sync', payload::text) $$;
 `;
 
-export const MIGRATIONS = [schema, api, discord, expiry, privateRealtime, calendarFeeds, nameLogin, adminNameLogin, oneGroupPerSlot, tdLessons, tdCalendarByTeacher, teamView, weekDeadline, weeklyMail, mailPreviewNote, taReminder, tdResidency, pmMeetRoom, tdMeetRoom, mailDesign, requestQuestions, mailRobust, monday8am, tdUnits, tdUnitOutline, tdTypeRatio, importSafeupdate, groupTeacher, groupTwoTeachers, appName, weeklyFixedSlot, bookAhead, discordAsk, discordFormat];
+export const MIGRATIONS = [schema, api, discord, expiry, privateRealtime, calendarFeeds, nameLogin, adminNameLogin, oneGroupPerSlot, tdLessons, tdCalendarByTeacher, teamView, weekDeadline, weeklyMail, mailPreviewNote, taReminder, tdResidency, pmMeetRoom, tdMeetRoom, mailDesign, requestQuestions, mailRobust, monday8am, tdUnits, tdUnitOutline, tdTypeRatio, importSafeupdate, groupTeacher, groupTwoTeachers, appName, weeklyFixedSlot, bookAhead, discordAsk, discordFormat, discordReminders];
 export const SEED = seed;

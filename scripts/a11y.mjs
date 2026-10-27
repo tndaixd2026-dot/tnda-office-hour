@@ -110,7 +110,7 @@ for (const scheme of ['light', 'dark']) {
   await page.waitForTimeout(700);
   await scan(page, 'admin weekly email (phone)');
   await page.evaluate(() => (location.hash = '#/admin/discord'));
-  await page.locator('.dc-msg').waitFor();
+  await page.locator('.dc-msg').first().waitFor();
   await page.waitForTimeout(500);
   await scan(page, 'admin Discord ask (phone)');
   await ctx.close();

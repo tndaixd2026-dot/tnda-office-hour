@@ -235,3 +235,95 @@ describe('Discord weekly ask', () => {
     await expectCode(db.call('oh_admin_discord', { p_token: g2 }), 'FORBIDDEN');
   });
 });
+
+describe('Discord reminders', () => {
+  let db: TestDb;
+  let admin: string;
+  let w7: number;
+  const ids: Record<number, number> = {};
+  const CH = (no: number) => `20000000000000000${no}`;
+  const fields = { p_topic: '感測器延遲', p_questions: 'q', p_progress: 'p', p_link: 'https://drive.google.com/drive/folders/x' };
+  const outbox = async (kind: 'summary' | 'today', force = false, only: number | null = null) =>
+    db.sql(`select * from app.discord_${kind}_outbox($1, $2)`, [force, only]);
+
+  beforeAll(async () => {
+    db = await makeDb();
+    await db.setNow('2026-10-16T08:00:00+08:00'); // Friday morning, before W7 closes
+    const c = await db.codes();
+    admin = await join(db, c.admin);
+    w7 = await weekId(db, 'W7');
+    for (const g of await db.sql('select id, no from app.groups')) ids[g.no] = g.id;
+    for (const no of [1, 2, 3, 4, 5, 6, 7]) await db.sql('select app.discord_set_channel($1, $2, true)', [ids[no], CH(no)]);
+    await db.sql(`select app.discord_set_bot($1, 'Office Hour', 'https://x.supabase.co/functions/v1/discord', 'https://example.github.io/oh/')`, ['ab'.repeat(32)]);
+    // groups 2 and 3 meet on Wednesday, a holiday that week
+    await db.call('oh_admin_save', { p_token: admin, p_kind: 'closure', p: { d: '2026-10-21', reason: '校慶' } });
+    const book = async (no: number) => db.call('oh_booking_save', { p_token: await join(db, c.groups[no], `組員${no}`), p_week: w7, ...fields });
+    await book(1);
+    await db.call('oh_booking_skip', { p_token: await join(db, c.groups[4], '組員4'), p_week: w7 });
+    await book(5);
+    await book(6);
+    const appts = (await db.call('oh_admin_state', { p_token: admin, p_week: w7 })).appointments;
+    const of = (no: number) => appts.find((a: any) => a.group_id === ids[no]).id;
+    await db.call('oh_admin_remove', { p_token: admin, p_id: of(5), p_reason: 'Tim 臨時有事' });
+    const prolong = (await db.one(`select id from app.teachers where name = 'Prolong'`)).id;
+    await db.call('oh_admin_move', { p_token: admin, p_id: of(6), p_teacher: prolong, p_d: '2026-10-23', p_t: '10:00' });
+  });
+
+  it("tells every group next week's outcome on Sunday morning, whatever it is", async () => {
+    await db.setNow('2026-10-18T08:00:00+08:00');
+    const rows = await outbox('summary');
+    expect(rows.map((r: any) => r.group_no)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(rows.every((r: any) => r.on_date.toISOString?.().startsWith('2026-10-1') ?? true)).toBe(true);
+    const by = (no: number) => rows.find((r: any) => r.group_no === no).payload.content;
+    expect(by(1)).toBe(
+      '## 📌 下週（W7）的 Office Hour\n### 10/20（二）17:00–18:00\n' +
+        '第 1 組「南宜到達的斜上方」 · Joseph · 🔗 [進入討論室](<https://meet.google.com/wgj-uxbz-bcv>)\n' +
+        '> 💬 **感測器延遲**\n-# 當天 08:00 會再提醒一次。不能來的話，開始前 24 小時以上可以在網站上取消，來不及就告訴助教',
+    );
+    expect(by(2)).toBe('## 📌 下週（W7）停一次\n10/21（三）遇到校慶，這週不排討論');
+    expect(by(4)).toBe('## 📌 下週（W7）不排 Office Hour\n-# 你們選了這週不約（組員4 決定的）');
+    expect(by(5)).toContain('## 📌 下週（W7）的 Office Hour 已取消\n### ~~10/22（四）17:00–18:00~~\n-# ');
+    expect(by(5)).toContain('取消：Tim 臨時有事');
+    expect(by(6)).toContain('### 10/23（五）10:00–11:00\n第 6 組「會努力的」 · Prolong');
+    expect(by(7)).toBe('## 📌 下週（W7）沒有 Office Hour\n-# 10/17（六）20:00 前沒有預約，這週不排討論');
+    expect(rows[0].payload.components[0].components.map((b: any) => b.label)).toEqual(['打開網站']);
+    for (const r of rows) await db.sql(`select app.discord_noted('summary', $1, $2, $3, $4)`, [r.group_id, r.on_date, r.channel_id, `7${r.group_no}`]);
+    expect(await outbox('summary')).toEqual([]);
+    expect((await outbox('summary', true, 4)).map((r: any) => r.group_no)).toEqual([4]);
+  });
+
+  it('reminds a group at 08:00 on the day of its session, once', async () => {
+    await db.setNow('2026-10-19T08:00:00+08:00'); // Monday: group 6 was moved to Friday
+    expect(await outbox('today')).toEqual([]);
+    await db.setNow('2026-10-20T08:00:00+08:00');
+    const rows = await outbox('today');
+    expect(rows.map((r: any) => r.group_no)).toEqual([1]);
+    expect(rows[0].payload.content).toBe(
+      '## ⏰ 今天 10/20（二）有 Office Hour\n### 17:00–18:00\n' +
+        '第 1 組「南宜到達的斜上方」 · Joseph · 🔗 [進入討論室](<https://meet.google.com/wgj-uxbz-bcv>)\n' +
+        '> 💬 **感測器延遲**\n-# 時間到了點上面的連結進入討論室。討論時 Google Meet 會錄影，僅作為紀錄使用',
+    );
+    await db.sql(`select app.discord_noted('today', $1, $2, $3, '81')`, [rows[0].group_id, rows[0].on_date, rows[0].channel_id]);
+    expect(await outbox('today')).toEqual([]);
+    // once it has started there is nothing to remind of, even forced
+    await db.setNow('2026-10-20T17:30:00+08:00');
+    expect(await outbox('today', true)).toEqual([]);
+    // the moved session is reminded on its new day; the cancelled one never
+    await db.setNow('2026-10-22T08:00:00+08:00');
+    expect(await outbox('today')).toEqual([]);
+    await db.setNow('2026-10-23T08:00:00+08:00');
+    const fri = await outbox('today');
+    expect(fri.map((r: any) => r.group_no)).toEqual([6]);
+    expect(fri[0].payload.content).toContain('## ⏰ 今天 10/23（五）有 Office Hour\n### 10:00–11:00\n第 6 組「會努力的」 · Prolong');
+  });
+
+  it('shows the admins all three messages and the reminders sent', async () => {
+    await db.setNow('2026-10-16T08:00:00+08:00');
+    const st = await db.call('oh_admin_discord', { p_token: admin });
+    expect(st.sample.content).toContain('要約 Office Hour 嗎？');
+    expect(st.sample_summary.content).toContain('## 📌 下週（W7）');
+    expect(st.sample_today.content).toContain('## ⏰ 今天');
+    expect(st.posts.filter((p: any) => p.kind === 'summary')).toHaveLength(7);
+    expect(st.posts.find((p: any) => p.kind === 'today')).toMatchObject({ group_no: 1, week: '10/20（二）' });
+  });
+});

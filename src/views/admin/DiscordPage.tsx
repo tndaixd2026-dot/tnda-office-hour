@@ -8,6 +8,13 @@ import { Loading } from '../../ui/kit';
 import { ErrorState } from '../student/StudentApp';
 
 const STATUS: Record<string, string> = { open: '已預約', skipped: '這週不約' };
+const KIND: Record<string, string> = { ask: '詢問', summary: '下週結果', today: '當天提醒' };
+const PLAN: Array<[string, string]> = [
+  ['週五 08:00', '問下週要不要約。按「預約這週」會跳出表單，填好題目、想問的問題、進度和雲端連結送出就排定；按「這週不約」就記下來'],
+  ['週六 20:00', '截止，詢問改成結果，按鈕拿掉'],
+  ['週日 08:00', '告訴各組下週的結果，有沒有約都會發'],
+  ['當天 08:00', '提醒當天有場次的組：時間、業師、討論室和題目'],
+];
 
 export function DiscordPage() {
   const { data: st, error, reload } = useLive<DiscordState>('oh_admin_discord', {});
@@ -20,11 +27,20 @@ export function DiscordPage() {
     <main class="page enter">
       <div class="stack tight">
         <p class="eyebrow">Discord 詢問</p>
-        <h1 class="title-l">每週五在各組頻道問要不要約</h1>
+        <h1 class="title-l">每週在各組頻道發的訊息</h1>
         <p class="muted small" style={{ maxWidth: '640px' }}>
-          機器人每週五 12:00 在各組的 Discord 頻道問下週要不要約。組員按「預約這週」會跳出表單，填好題目、想問的問題、進度和雲端連結送出就排定；按「這週不約」就記下來。週六 20:00 截止後，訊息會改成結果，按鈕也會拿掉
+          機器人在各組自己的 Discord 頻道發訊息，組員不用打開網站就能預約或不約
         </p>
       </div>
+
+      <dl class="dc-plan">
+        {PLAN.map(([when, what]) => (
+          <div key={when}>
+            <dt class="mono">{when}</dt>
+            <dd class="small">{what}</dd>
+          </div>
+        ))}
+      </dl>
 
       <section class="card pad-l stack" aria-labelledby="d-bot">
         <div class="row between wrap">
@@ -49,7 +65,7 @@ export function DiscordPage() {
         )}
         {week && (
           <p class="small muted">
-            下一次：{dayLabel(addDays(week.deadline.slice(0, 10), -1))} 12:00 詢問 {week.label ? `${week.label} ` : ''}
+            下一次：{dayLabel(addDays(week.deadline.slice(0, 10), -1))} 08:00 詢問 {week.label ? `${week.label} ` : ''}
             {mdPad(week.start)}–{mdPad(addDays(week.start, 4))}，{deadlineText(week.deadline)} 截止
           </p>
         )}
@@ -77,9 +93,25 @@ export function DiscordPage() {
         <section class="section" aria-labelledby="d-preview">
           <div class="section-head">
             <h2 id="d-preview">訊息預覽</h2>
-            <span class="small muted">第 {st.sample_group} 組現在會看到的樣子，組員回覆後會跟著更新</span>
+            <span class="small muted">以第 {st.sample_group} 組現在的狀態為例</span>
           </div>
-          <MessagePreview m={st.sample} name={st.name} now={now} />
+          <div class="dc-previews">
+            {(
+              [
+                ['週五 08:00 詢問', st.sample],
+                ['週日 08:00 下週結果', st.sample_summary],
+                ['當天 08:00 提醒', st.sample_today],
+              ] as const
+            ).map(
+              ([label, m]) =>
+                m && (
+                  <div class="stack tight" key={label}>
+                    <h3 class="small muted">{label}</h3>
+                    <MessagePreview m={m} name={st.name} now={now} />
+                  </div>
+                ),
+            )}
+          </div>
         </section>
       )}
 
@@ -88,13 +120,14 @@ export function DiscordPage() {
           <h2 id="d-log">發送紀錄</h2>
         </div>
         {st.posts.length === 0 ? (
-          <p class="muted small">還沒有發過詢問</p>
+          <p class="muted small">還沒有發過訊息</p>
         ) : (
           <div class="table-wrap" tabIndex={0} role="region" aria-labelledby="d-log">
             <table class="t">
               <thead>
                 <tr>
-                  <th scope="col">週次</th>
+                  <th scope="col">訊息</th>
+                  <th scope="col">週次／日期</th>
                   <th scope="col">組別</th>
                   <th scope="col">發出</th>
                   <th scope="col">回覆</th>
@@ -103,12 +136,19 @@ export function DiscordPage() {
               <tbody>
                 {st.posts.map((p) => (
                   <tr key={p.id}>
+                    <td class="nowrap small">{KIND[p.kind]}</td>
                     <td class="nowrap small mono">{p.week}</td>
                     <td class="nowrap small">第 {p.group_no} 組</td>
                     <td class="nowrap small">{agoText(p.posted_at, now)}</td>
                     <td class="nowrap small">
-                      {(p.status && STATUS[p.status]) || (p.closed_at ? '沒有回覆' : '還沒決定')}
-                      {p.closed_at ? <span class="muted"> · 已截止</span> : null}
+                      {p.kind !== 'ask' ? (
+                        <span class="muted">—</span>
+                      ) : (
+                        <>
+                          {(p.status && STATUS[p.status]) || (p.closed_at ? '沒有回覆' : '還沒決定')}
+                          {p.closed_at ? <span class="muted"> · 已截止</span> : null}
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))}

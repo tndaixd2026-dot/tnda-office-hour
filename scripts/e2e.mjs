@@ -254,13 +254,14 @@ try {
 
   await run('admin sees the Discord ask: setup, channels and a preview', async () => {
     await page.getByRole('complementary', { name: '管理選單' }).getByRole('link', { name: 'Discord 詢問' }).click();
-    await page.getByRole('heading', { name: '每週五在各組頻道問要不要約' }).waitFor();
+    await page.getByRole('heading', { name: '每週在各組頻道發的訊息' }).waitFor();
     // the demo has no bot, so it shows how to set one up
     await page.getByText('還沒連接').waitFor();
     await page.getByText('到 Discord Developer Portal 建立新的 Application', { exact: false }).waitFor();
     check((await page.locator('#d-groups').locator('xpath=../..').locator('.li').count()) === 7, 'every group should be listed');
-    await page.locator('.dc-msg', { hasText: 'Office Hour' }).waitFor();
+    await page.locator('.dc-msg', { hasText: 'Office Hour' }).first().waitFor();
     check((await page.locator('.dc-msg .dc-btn').count()) >= 1, 'the preview should show the buttons');
+    check((await page.locator('.dc-msg').count()) === 3, 'the question, the week\'s outcome and the day\'s reminder should all be previewed');
     await page.getByRole('complementary', { name: '管理選單' }).getByRole('link', { name: '設定' }).click();
     await page.getByRole('heading', { name: '課程與規則' }).first().waitFor();
   });

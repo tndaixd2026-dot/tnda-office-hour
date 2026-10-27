@@ -3021,7 +3021,31 @@ button.ls-day:hover {
   }
 }
 
-/* Discord 詢問: roughly how the bot's message looks in Discord */
+/* Discord 詢問: the week's messages, and roughly how each looks in Discord */
+.dc-plan {
+  display: grid;
+  gap: 10px;
+  max-width: 640px;
+  margin: 0;
+}
+.dc-plan > div {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: 12px;
+  align-items: baseline;
+}
+.dc-plan dt {
+  font-size: 14px;
+  font-weight: 600;
+}
+.dc-plan dd {
+  margin: 0;
+  color: var(--ink-2);
+}
+.dc-previews {
+  display: grid;
+  gap: 18px;
+}
 .dc-msg {
   display: grid;
   gap: 10px;

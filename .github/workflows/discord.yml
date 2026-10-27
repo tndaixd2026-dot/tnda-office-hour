@@ -1,27 +1,29 @@
-# Asks each group in its own Discord channel about the coming week
+# The weekly Office Hour messages in each group's own Discord channel
 # (scripts/discord-ask.mjs). GitHub starts scheduled runs late at busy
 # times, so each one starts early and the script waits for the exact time
 # in Taipei:
-#   Friday 12:00    each group's message about next week, with the
-#                   buttons to book it (a Discord form) or skip it
-#   Saturday 20:00  the week has closed: each message shows the outcome
+#   Friday 08:00     the question about next week, with the buttons to
+#                    book it (a Discord form) or skip it
+#   Saturday 20:00   the week has closed: each question shows the outcome
+#   Sunday 08:00     next week's outcome, whatever it is
+#   every day 08:00  a reminder to each group with a session that day
 # Needs the repository secret DISCORD_BOT_TOKEN besides
 # SUPABASE_DB_PASSWORD; until it is there the runs do nothing.
 name: Discord weekly ask
 
 on:
   schedule:
-    - cron: '38 3 * * 5' # Friday 11:38 Taipei
+    - cron: '38 23 * * *' # every day 07:38 Taipei (23:38 UTC the day before)
     - cron: '38 11 * * 6' # Saturday 19:38 Taipei
   workflow_dispatch:
     inputs:
       kind:
-        description: 'setup：連接機器人、找出各組的頻道，不發訊息；ask：發下一週的詢問（每組每週一次）；refresh：把還沒截止的訊息更新成現在的樣子；close：把已截止的訊息改成結果'
+        description: 'setup：連接機器人、找出各組的頻道，不發訊息；ask：發下一週的詢問；summary：發下週的結果；today：提醒今天有場次的組；refresh：把還沒截止的詢問更新成現在的樣子；close：把已截止的詢問改成結果（每則訊息每組只發一次）'
         type: choice
-        options: [setup, ask, refresh, close]
+        options: [setup, ask, summary, today, refresh, close]
         default: setup
       only:
-        description: 'ask 只發給這一組（填組別編號，例如 2），空白就發給全部'
+        description: '只發給這一組（填組別編號，例如 2），空白就發給全部'
         type: string
         default: ''
       force:
@@ -55,8 +57,8 @@ jobs:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
       - name: Ask
         env:
-          KIND: ${{ github.event_name == 'workflow_dispatch' && inputs.kind || (github.event.schedule == '38 3 * * 5' && 'ask' || 'close') }}
-          SEND_AT: ${{ github.event_name == 'schedule' && (github.event.schedule == '38 3 * * 5' && '12:00' || '20:01') || '' }}
+          KIND: ${{ github.event_name == 'workflow_dispatch' && inputs.kind || (github.event.schedule == '38 11 * * 6' && 'close' || 'morning') }}
+          SEND_AT: ${{ github.event_name == 'schedule' && (github.event.schedule == '38 11 * * 6' && '20:01' || '08:00') || '' }}
           ONLY: ${{ inputs.only }}
           FORCE: ${{ inputs.force && '1' || '' }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '' }}

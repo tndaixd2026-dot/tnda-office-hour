@@ -412,10 +412,13 @@ export interface DiscordState {
   checked_at: string | null;
   /** the week Friday's message is about */
   week: { id: number; label: string; start: string; deadline: string } | null;
+  /** Friday's question, Sunday's outcome and the day's reminder, for one group */
   sample: DiscordMessage | null;
+  sample_summary: DiscordMessage | null;
+  sample_today: DiscordMessage | null;
   sample_group: number | null;
   groups: DiscordGroup[];
-  posts: Array<{ id: number; group_no: number; week_id: number; week: string; posted_at: string; closed_at: string | null; status: Request['status'] | null }>;
+  posts: Array<{ id: string; kind: 'ask' | 'summary' | 'today'; group_no: number; week: string; posted_at: string; closed_at: string | null; status: Request['status'] | null }>;
 }
 
 export interface MailState {

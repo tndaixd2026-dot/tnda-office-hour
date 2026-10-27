@@ -11,7 +11,7 @@ begin;
 
 truncate app.events, app.appointments, app.request_slots, app.requests,
          app.sessions, app.join_attempts, app.roster, app.mail_log,
-         app.discord_posts, app.discord_drafts restart identity;
+         app.discord_posts, app.discord_drafts, app.discord_notes restart identity;
 
 update app.groups   set code = app.new_code(8),  feed = app.new_feed();
 update app.teachers set code = app.new_code(10), feed = app.new_feed();
