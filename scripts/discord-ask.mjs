@@ -6,6 +6,8 @@
 //               channel (from the group's webhook) and whether the bot sees it
 //   KIND=ask    setup, then each group's message about the next open week,
 //               with the buttons to book or skip it (once per group and week)
+//   KIND=refresh  setup, then redraw the messages still open as they stand
+//               now (after a change on the site, or to the message's layout)
 //   KIND=close  setup, then rewrite the messages of the weeks that have
 //               closed: the outcome, no buttons
 //   ONLY=2      ask just group 2 (to try it out)
@@ -23,7 +25,7 @@ import pg from 'pg';
 
 const API = 'https://discord.com/api/v10';
 const on = (v) => v === '1' || v === 'true';
-const kind = ['ask', 'close'].includes(process.env.KIND) ? process.env.KIND : 'setup';
+const kind = ['ask', 'refresh', 'close'].includes(process.env.KIND) ? process.env.KIND : 'setup';
 const dry = on(process.env.DRY_RUN);
 const force = on(process.env.FORCE);
 const only = /^\d+$/.test(process.env.ONLY?.trim() ?? '') ? Number(process.env.ONLY) : null;
@@ -203,6 +205,25 @@ if (kind === 'ask') {
     }
   }
   console.log(`asked ${sent} of ${rows.length} groups`);
+}
+
+if (kind === 'refresh') {
+  const rows = (await db.query('select * from app.discord_refreshing()')).rows;
+  let done = 0;
+  for (const r of rows) {
+    if (dry) {
+      console.log(`第 ${r.group_no} 組：would redraw`);
+      continue;
+    }
+    const { content, components, allowed_mentions } = r.payload;
+    const res = await discord('PATCH', `/channels/${r.channel_id}/messages/${r.message_id}`, { content, components, allowed_mentions });
+    if (res.ok) done++;
+    else {
+      console.error(`::error::第 ${r.group_no} 組：Discord 沒有更新訊息（${why(res)}）`);
+      failed++;
+    }
+  }
+  console.log(`redrew ${done} of ${rows.length} messages`);
 }
 
 if (kind === 'close') {

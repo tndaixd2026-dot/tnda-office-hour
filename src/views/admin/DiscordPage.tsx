@@ -1,3 +1,4 @@
+import type { ComponentChildren } from 'preact';
 import type { DiscordGroup, DiscordMessage, DiscordState } from '../../api/types';
 import { useLive } from '../../app/hooks';
 import { deadlineText } from '../../lib/format';
@@ -78,7 +79,7 @@ export function DiscordPage() {
             <h2 id="d-preview">訊息預覽</h2>
             <span class="small muted">第 {st.sample_group} 組現在會看到的樣子，組員回覆後會跟著更新</span>
           </div>
-          <MessagePreview m={st.sample} name={st.name} />
+          <MessagePreview m={st.sample} name={st.name} now={now} />
         </section>
       )}
 
@@ -148,8 +149,41 @@ function SetupSteps() {
   );
 }
 
-/** Roughly how Discord shows the message: **bold**, <links>, the buttons. */
-function MessagePreview({ m, name }: { m: DiscordMessage; name: string | null }) {
+/** "4 天後": Discord's <t:…:R> countdown, roughly. */
+function countdown(unix: number, now: number) {
+  const ms = unix * 1000 - now;
+  const [n, unit] = Math.abs(ms) >= 86_400_000 ? [ms / 86_400_000, '天'] : Math.abs(ms) >= 3_600_000 ? [ms / 3_600_000, '小時'] : [ms / 60_000, '分鐘'];
+  return `${Math.round(Math.abs(n))} ${unit}${ms >= 0 ? '後' : '前'}`;
+}
+
+/** Discord's inline marks: **bold**, ~~struck~~, [links](<url>), <url>, <t:…:R> and \-escapes. */
+function inline(text: string, now: number): ComponentChildren[] {
+  const out: ComponentChildren[] = [];
+  const re = /\\([\\*_~`|<>#[\]()-])|\*\*(.+?)\*\*|~~(.+?)~~|\[([^\]]+)\]\(<?(https?:\/\/[^)>\s]+)>?\)|<(https?:\/\/[^>\s]+)>|<t:(\d+):R>/g;
+  let last = 0;
+  for (const x of text.matchAll(re)) {
+    out.push(text.slice(last, x.index));
+    if (x[1]) out.push(x[1]);
+    else if (x[2]) out.push(<b>{inline(x[2], now)}</b>);
+    else if (x[3]) out.push(<s>{inline(x[3], now)}</s>);
+    else if (x[4])
+      out.push(
+        <a href={x[5]} target="_blank" rel="noopener noreferrer">
+          {x[4]}
+        </a>,
+      );
+    else if (x[6]) out.push(x[6]);
+    else out.push(countdown(Number(x[7]), now));
+    last = x.index + x[0].length;
+  }
+  out.push(text.slice(last));
+  return out;
+}
+
+const BLOCKS: Array<[string, string]> = [['### ', 'dc-h3'], ['## ', 'dc-h2'], ['-# ', 'dc-sub'], ['> ', 'dc-quote']];
+
+/** Roughly how Discord shows the message: headings, small text, quotes, the buttons. */
+function MessagePreview({ m, name, now }: { m: DiscordMessage; name: string | null; now: number }) {
   const buttons = m.components.flatMap((row) => row.components);
   return (
     <div class="dc-msg">
@@ -161,14 +195,14 @@ function MessagePreview({ m, name }: { m: DiscordMessage; name: string | null })
         <span class="dc-tag">機器人</span>
       </div>
       <div class="dc-body">
-        {m.content.split('\n').map((line, i) => (
-          <p key={i}>
-            {line
-              .replace(/<(https?:\/\/[^>]+)>/g, '$1')
-              .split(/\*\*/)
-              .map((part, j) => (j % 2 ? <b key={j}>{part}</b> : part))}
-          </p>
-        ))}
+        {m.content.split('\n').map((line, i) => {
+          const [mark, cls] = BLOCKS.find(([p]) => line.startsWith(p)) ?? ['', ''];
+          return (
+            <p key={i} class={cls}>
+              {inline(line.slice(mark.length), now)}
+            </p>
+          );
+        })}
       </div>
       {buttons.length > 0 && (
         <div class="dc-buttons">

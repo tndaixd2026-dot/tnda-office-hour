@@ -155,7 +155,7 @@ psql "<資料庫連線字串>" -f scripts/fresh-start.sql
 
 ### Discord 每週詢問
 
-`.github/workflows/discord.yml` 每週五 11:38 和週六 19:38（台北時間）啟動，`scripts/discord-ask.mjs` 等到 12:00／20:01 才動作：週五在每組的頻道貼出下週的固定時段和按鈕（每組每週一則），週六截止後把訊息改成結果、拿掉按鈕。組員按「預約這週」會跳出 Discord 的表單（題目、想問的問題、進度、雲端連結，可以帶出上次填的內容），送出就排定；按「這週不約」就記下來。訊息上的「這週不約」記得它是什麼時候的狀態：組員在網站上改過之後，按舊訊息上的按鈕只會把訊息更新成現在的樣子，不會蓋掉。後台「Discord 詢問」可以看機器人狀態、每組頻道、訊息預覽和發送紀錄。
+`.github/workflows/discord.yml` 每週五 11:38 和週六 19:38（台北時間）啟動，`scripts/discord-ask.mjs` 等到 12:00／20:01 才動作：週五在每組的頻道貼出下週的固定時段和按鈕（每組每週一則），週六截止後把訊息改成結果、拿掉按鈕。組員按「預約這週」會跳出 Discord 的表單（題目、想問的問題、進度、雲端連結，可以帶出上次填的內容），送出就排定；按「這週不約」就記下來。訊息用 Discord 的格式排版：時間是標題，截止時間加粗並附上倒數，說明是小字；學生打的題目和名字會照原樣顯示，不會變成格式。訊息上的「這週不約」記得它是什麼時候的狀態：組員在網站上改過之後，按舊訊息上的按鈕只會把訊息更新成現在的樣子，不會蓋掉。後台「Discord 詢問」可以看機器人狀態、每組頻道、訊息預覽和發送紀錄。
 
 第一次使用前（只要做一次）：
 
@@ -163,7 +163,7 @@ psql "<資料庫連線字串>" -f scripts/fresh-start.sql
 2. 在 OAuth2 → URL Generator 勾選 `bot`，權限勾 View Channels 和 Send Messages，打開產生的網址，把機器人加進課程的伺服器。
 3. 在每組的頻道（或整個分類）的權限加入這個機器人，讓它看得到、能發言。
 4. GitHub repo → Settings → Secrets and variables → Actions，新增 `DISCORD_BOT_TOKEN`（剛剛的 Token）和 `SUPABASE_ACCESS_TOKEN`（Supabase → Account → Access Tokens 產生，用來部署 Edge Function）。
-5. Actions →「Test and deploy」→ Run workflow（部署 Edge Function），完成後再執行「Discord weekly ask」，選 `setup`。腳本會從 Discord 讀出機器人的 Public Key 存進資料庫，把機器人的 Interactions Endpoint 設成 Edge Function（Discord 會當場驗證），再從各組的 Webhook 找出頻道。後台「Discord 詢問」顯示「已連接」就完成了。想先試一組時，選 `ask`、在 `only` 填組別編號。
+5. Actions →「Test and deploy」→ Run workflow（部署 Edge Function），完成後再執行「Discord weekly ask」，選 `setup`。腳本會從 Discord 讀出機器人的 Public Key 存進資料庫，把機器人的 Interactions Endpoint 設成 Edge Function（Discord 會當場驗證），再從各組的 Webhook 找出頻道。後台「Discord 詢問」顯示「已連接」就完成了。想先試一組時，選 `ask`、在 `only` 填組別編號。改了訊息的樣式，或想讓已發出的訊息反映網站上的變動時，選 `refresh`。
 
 紀錄是公開的，所以只印組別編號、數量和 Discord 的狀態碼，不印 Token、Webhook 或訊息內容。
 

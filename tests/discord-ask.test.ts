@@ -60,9 +60,12 @@ describe('Discord weekly ask', () => {
     expect(out.map((r: any) => r.group_no)).toEqual([1, 2, 3, 4, 5, 6, 7]);
     const m = out.find((r: any) => r.group_no === 2);
     expect(m).toMatchObject({ week_id: w7, channel_id: CH(2) });
-    expect(m.payload.content).toContain('**📅 W7 10/19–10/23 要約 Office Hour 嗎？**');
-    expect(m.payload.content).toContain('10/21（三）10:00–11:00 · Prolong');
-    expect(m.payload.content).toContain('請在 10/17（六）20:00 前決定');
+    // the time as a heading, the deadline in bold with Discord's countdown
+    const due = Math.floor(Date.parse('2026-10-17T20:00:00+08:00') / 1000);
+    expect(m.payload.content).toBe(
+      `## 📅 W7 要約 Office Hour 嗎？\n### 10/21（三）10:00–11:00\n第 2 組「看到太陽就知道完蛋了」 · Prolong\n⏰ 請在 **10/17（六）20:00** 前決定（<t:${due}:R>）\n` +
+        '-# 要約就按「預約這週」，填好題目、想問的問題、目前進度和雲端資料夾連結，送出就排定',
+    );
     expect(labels(m.payload)).toEqual(['預約這週', '這週不約', '打開網站']);
     expect(m.payload.components[0].components[0].custom_id).toBe(`oh:book:${w7}`);
     expect(m.payload.allowed_mentions).toEqual({ parse: [] });
@@ -86,10 +89,10 @@ describe('Discord weekly ask', () => {
 
     const r = await submit(2, form.data.custom_id, fields);
     expect(r.type).toBe(7);
-    expect(r.data.content).toContain('**✅ W7 10/19–10/23 已預約 Office Hour**');
-    expect(r.data.content).toContain('討論室：<https://meet.google.com/gtj-tcpu-wmu>');
-    expect(r.data.content).toContain('題目：感測器延遲');
-    expect(r.data.content).toContain('小晴 填的，10/17（六）20:00 前都可以修改或改成這週不約');
+    expect(r.data.content).toBe(
+      '## ✅ W7 已預約 Office Hour\n### 10/21（三）10:00–11:00\n第 2 組「看到太陽就知道完蛋了」 · Prolong · 🔗 [進入討論室](<https://meet.google.com/gtj-tcpu-wmu>)\n' +
+        '> 💬 **感測器延遲**\n-# 小晴 填的 · 10/17（六）20:00 前都可以修改或改成這週不約',
+    );
     expect(labels(r.data)).toEqual(['修改內容', '這週不約', '打開網站']);
     // the same booking as on the site: confirmed at once, under the nickname
     const st = await db.call('oh_student_state', { p_token: g2 });
@@ -124,7 +127,7 @@ describe('Discord weekly ask', () => {
   it('skips the week, and books it after all', async () => {
     let r = await press(4, `oh:skip:${w7}:0`);
     expect(r.type).toBe(7);
-    expect(r.data.content).toBe('**W7 10/19–10/23 這週不約**\n小晴 決定的，10/17（六）20:00 前都可以改成預約');
+    expect(r.data.content).toBe('## W7 這週不約\n10/22（四）10:00–11:00 不排討論\n-# 小晴 決定的 · 10/17（六）20:00 前都可以改成預約');
     expect(labels(r.data)).toEqual(['改成預約', '打開網站']);
     const form = await press(4, `oh:book:${w7}`);
     expect(form.data.custom_id).toMatch(new RegExp(`^oh:save:${w7}:[1-9]`));
@@ -147,7 +150,7 @@ describe('Discord weekly ask', () => {
     await db.call('oh_booking_save', { p_token: g6, p_week: w7, p_topic: '網站上約的', p_questions: 'q', p_progress: 'p', p_link: fields.link });
     const r = await press(6, stale);
     expect(r.type).toBe(7);
-    expect(r.data.content).toContain('題目：網站上約的');
+    expect(r.data.content).toContain('> 💬 **網站上約的**');
     expect((await db.call('oh_student_state', { p_token: g6 })).request.status).toBe('open');
   });
 
@@ -165,22 +168,37 @@ describe('Discord weekly ask', () => {
     expect((await db.one(`select app.discord_interaction('{"type": 1}') as r`)).r).toEqual({ type: 1 });
   });
 
+  it('shows typed text as typed, not as Discord formatting', async () => {
+    const g5 = await join(db, (await db.codes()).groups[5], '**組長** #1');
+    await db.call('oh_booking_save', { p_token: g5, p_week: w7, p_topic: '# 標題 **粗體** [連結](x) ~刪~', p_questions: 'q', p_progress: 'p', p_link: fields.link });
+    const m = (await db.one('select app.discord_message($1, $2) as m', [ids[5], w7])).m;
+    expect(m.content).toContain('> 💬 **\\# 標題 \\*\\*粗體\\*\\* \\[連結\\]\\(x\\) \\~刪\\~**');
+    expect(m.content).toContain('-# \\*\\*組長\\*\\* \\#1 填的');
+  });
+
+  it('lists the messages still open, to redraw them', async () => {
+    const open = await db.sql('select * from app.discord_refreshing()');
+    expect(open.map((o: any) => o.group_no)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(open.find((o: any) => o.group_no === 5).payload.content).toContain('已預約');
+  });
+
   it('closes on Saturday at 20:00 and rewrites each message with the outcome', async () => {
     await db.setNow('2026-10-17T20:00:00+08:00');
     // a late press just shows the closed message
     const late = await press(1, `oh:book:${w7}`);
     expect(late.type).toBe(7);
-    expect(late.data.content).toBe('**W7 10/19–10/23 沒有預約**\n已在 10/17（六）20:00 截止，這週不排討論');
+    expect(late.data.content).toBe('## W7 沒有預約\n-# 已在 10/17（六）20:00 截止，這週不排討論');
     expect(labels(late.data)).toEqual(['打開網站']);
     const closing = await db.sql('select * from app.discord_closing()');
     expect(closing.map((c: any) => c.group_no)).toEqual([1, 2, 3, 4, 5, 6, 7]);
     const by = (no: number) => closing.find((c: any) => c.group_no === no).payload;
-    expect(by(3).content).toContain('**✅ W7 10/19–10/23 已預約 Office Hour**');
+    expect(by(3).content).toContain('## ✅ W7 已預約 Office Hour');
     expect(by(3).content).not.toContain('前都可以');
-    expect(by(2).content).toBe('**W7 10/19–10/23 這週不約**\n小晴 決定的');
+    expect(by(2).content).toBe('## W7 這週不約\n10/21（三）10:00–11:00 不排討論\n-# 小晴 決定的');
     expect(labels(by(3))).toEqual(['打開網站']);
     for (const c of closing) await db.sql('select app.discord_closed($1)', [c.post_id]);
     expect(await db.sql('select * from app.discord_closing()')).toEqual([]);
+    expect(await db.sql('select * from app.discord_refreshing()')).toEqual([]);
     // and the next ask is about W8
     expect((await db.sql('select week_id from app.discord_outbox()'))[0].week_id).toBe(w8);
     await db.setNow(FRI);
@@ -190,15 +208,15 @@ describe('Discord weekly ask', () => {
     const msg = async (no: number, week: number) => (await db.one('select app.discord_message($1, $2) as m', [ids[no], week])).m;
     await db.call('oh_admin_save', { p_token: admin, p_kind: 'closure', p: { d: '2026-10-29', reason: '校慶' } }); // a Thursday
     const h = await msg(4, w8);
-    expect(h.content).toBe('**W8 10/26–10/30 遇到校慶，停一次**\n固定時段那天放假，這週不用預約');
+    expect(h.content).toBe('## W8 停一次\n10/29（四）遇到校慶，這週不用預約');
     expect(labels(h)).toEqual(['打開網站']);
     // 改期 by the admins shows the new time
     const [a] = (await db.call('oh_admin_state', { p_token: admin, p_week: w7 })).appointments.filter((x: any) => x.group_id === ids[3]);
     const prolong = (await db.one(`select id from app.teachers where name = 'Prolong'`)).id;
     await db.call('oh_admin_move', { p_token: admin, p_id: a.id, p_teacher: prolong, p_d: '2026-10-23', p_t: '10:00' });
-    expect((await msg(3, w7)).content).toContain('10/23（五）10:00–11:00 · Prolong');
+    expect((await msg(3, w7)).content).toContain('### 10/23（五）10:00–11:00\n第 3 組「這組有誠意」 · Prolong');
     await db.sql(`update app.weeks set open = false where id = $1`, [w8]);
-    expect((await msg(1, w8)).content).toBe('**W8 10/26–10/30 暫停**\n這週不排 Office Hour，有問題可以問助教');
+    expect((await msg(1, w8)).content).toBe('## W8 暫停\n-# 這週不排 Office Hour，有問題可以問助教');
     await db.sql(`update app.weeks set open = true where id = $1`, [w8]);
   });
 

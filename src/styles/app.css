@@ -3066,6 +3066,28 @@ button.ls-day:hover {
 .dc-body p {
   overflow-wrap: anywhere;
 }
+/* Discord's ## and ### headings, -# small text and > quotes */
+.dc-body .dc-h2 {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.dc-body .dc-h3 {
+  margin-top: 2px;
+  font-size: 17px;
+  font-weight: 700;
+}
+.dc-body .dc-sub {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.dc-body .dc-quote {
+  padding-left: 12px;
+  border-left: 4px solid var(--line-2);
+}
+.dc-body a {
+  color: var(--info);
+}
 .dc-buttons {
   display: flex;
   flex-wrap: wrap;
