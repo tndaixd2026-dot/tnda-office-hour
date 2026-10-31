@@ -111,7 +111,8 @@ describe('weekly email', () => {
     expect(prolong.html).not.toContain('>Prolong 1 場</span>');
     expect(tim.html).toContain('下週沒有排到 Office Hour');
     expect(tim.html).toContain('下週沒有安排場次，不用預留時間');
-    expect(office.html).toContain('這封信由 Office Hour 平台在每週日 08:00 自動寄出');
+    expect(office.html).toContain('這封信由 Office Hour 平台在每週日 08:00 自動寄出，有問題可在 Discord 聯絡 TNDA 助教');
+    expect(office.html).not.toContain('回覆這封信');
     // student text is escaped
     expect(prolong.html).toContain('<b>展場動線 &amp; &lt;排隊&gt;</b>');
     expect(prolong.html).not.toContain('<排隊>');
