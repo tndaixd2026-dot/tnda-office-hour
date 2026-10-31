@@ -1,8 +1,8 @@
 // Sends the weekly Office Hour email; run by .github/workflows/mail.yml.
 //
-//   KIND=weekly   each recipient gets this week's sessions (Monday)
+//   KIND=weekly   each recipient gets next week's sessions (Sunday)
 //   KIND=remind   the admins' mailbox gets next week's requests (Sunday noon)
-//   KIND=preview  the admins' mailbox gets all of it first (Sunday)
+//   KIND=preview  the admins' mailbox gets all of it first (Saturday)
 //   KIND=test     the email with every PM's sessions for the nearest week
 //                 that has some, only to the sending account; nothing is logged
 //   KIND=sample   the same, written from the demo's sessions (the site's demo
@@ -62,7 +62,7 @@ function untilTaipei(hhmm) {
 const SAMPLE_NOTE =
   '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 0 12px;">' +
   '<tr><td bgcolor="#fbf0dc" style="padding:14px 16px;border:1px solid #e9d3ad;border-radius:12px;background-color:#fbf0dc;font-size:14px;text-align:left;">' +
-  '<b>這是範例信。</b>場次、組別和題目都是示範資料，實際的信會在每週一 08:00 依當週發布的場次寄出。' +
+  '<b>這是範例信。</b>場次、組別和題目都是示範資料，實際的信會在每週日 08:00 依下週排定的場次寄出。' +
   '<div style="margin-top:6px;">最上方的「一鍵把全部場次加到 Google 日曆」訂閱的是正式的行事曆（三位老師的全部場次），助教發布場次後就會自動出現；' +
   '每一場的「加入會議」和「加到 Google 日曆」可以直接試按，後者會打開 Google 日曆，按「儲存」才會加進去</div>' +
   '</td></tr></table>';
@@ -71,10 +71,10 @@ const TEST_NOTE =
   '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 0 12px;">' +
   '<tr><td bgcolor="#fbf0dc" style="padding:14px 16px;border:1px solid #e9d3ad;border-radius:12px;background-color:#fbf0dc;font-size:14px;text-align:left;">' +
   '<b>這是測試信，不用回覆。</b>用來確認您收得到 Office Hour 的通知、版面也正常。下面的場次、組別和題目都是示範資料，請不要加到日曆。' +
-  '<div style="margin-top:6px;">正式的信會在每週一 08:00 寄出，內容是當週實際排定的場次。最上方的「一鍵把全部場次加到 Google 日曆」是正式的訂閱連結，現在訂閱之後，場次排定時就會自動出現</div>' +
+  '<div style="margin-top:6px;">正式的信會在每週日 08:00 寄出，內容是下週實際排定的場次。最上方的「一鍵把全部場次加到 Google 日曆」是正式的訂閱連結，現在訂閱之後，場次排定時就會自動出現</div>' +
   '</td></tr></table>';
 const TEST_TEXT =
-  '這是測試信，不用回覆。下面的場次、組別和題目都是示範資料，請不要加到日曆。正式的信會在每週一 08:00 寄出，內容是當週實際排定的場次。\n\n';
+  '這是測試信，不用回覆。下面的場次、組別和題目都是示範資料，請不要加到日曆。正式的信會在每週日 08:00 寄出，內容是下週實際排定的場次。\n\n';
 
 /** The site's demo database: the same migrations, seed and demo data as
  *  demo mode (read from src/db/sql.ts, so the list is never copied). */
@@ -112,11 +112,11 @@ if (process.env.SEND_AT && !dry) {
 
 const db = new pg.Client({ connectionString: url, ssl: /localhost|127\.0\.0\.1/.test(url) ? false : { rejectUnauthorized: false } });
 await db.connect();
-// Monday's email is about the week it starts; Sunday's reminder and preview,
-// the coming one; a test, the first week from this one on with sessions (or
-// the last)
+// Sunday's email, Saturday's preview and the old reminder are about the
+// coming week (sent by hand on a Monday, the week it starts); a test, the
+// first week from this one on with sessions (or the last)
 const from = {
-  weekly: 'app.today()',
+  weekly: 'app.mail_week(app.today())',
   remind: 'app.mail_week(app.today())',
   preview: 'app.mail_week(app.today())',
   test: `coalesce((select min(a.d) from app.appointments a where a.status = 'confirmed'

@@ -96,9 +96,9 @@ describe('weekly email', () => {
   it('writes each recipient the sessions of the teachers they follow', async () => {
     const msgs = await outbox('weekly');
     expect(msgs.map((m: any) => [m.to, m.subject, m.count])).toEqual([
-      ['office@example.com', '【Office Hour】本週 2 場（10/19–10/25）', 2],
-      ['prolong@example.com', '【Office Hour】Prolong 本週 1 場（10/19–10/25）', 1],
-      ['tim@example.com', '【Office Hour】Tim 本週沒有場次（10/19–10/25）', 0],
+      ['office@example.com', '【Office Hour】下週 2 場（10/19–10/25）', 2],
+      ['prolong@example.com', '【Office Hour】Prolong 下週 1 場（10/19–10/25）', 1],
+      ['tim@example.com', '【Office Hour】Tim 下週沒有場次（10/19–10/25）', 0],
     ]);
     const [office, prolong, tim] = msgs;
     expect(office.html).toContain('叁式公司 您好');
@@ -109,7 +109,9 @@ describe('weekly email', () => {
     expect(office.html).toContain('>Joseph 1 場</span>');
     expect(office.html).toContain('>Prolong 1 場</span>');
     expect(prolong.html).not.toContain('>Prolong 1 場</span>');
-    expect(tim.html).toContain('這週沒有排到 Office Hour');
+    expect(tim.html).toContain('下週沒有排到 Office Hour');
+    expect(tim.html).toContain('下週沒有安排場次，不用預留時間');
+    expect(office.html).toContain('這封信由 Office Hour 平台在每週日 08:00 自動寄出');
     // student text is escaped
     expect(prolong.html).toContain('<b>展場動線 &amp; &lt;排隊&gt;</b>');
     expect(prolong.html).not.toContain('<排隊>');
@@ -134,6 +136,22 @@ describe('weekly email', () => {
     expect(office.html).toContain(SITE);
   });
 
+  it('calls the week 下週 before it starts and 這週 once it has', async () => {
+    const office = async () => (await outbox('weekly', { force: true }))[0];
+    // the preview on Saturday 21:00 and the email on Sunday 08:00: the coming week
+    for (const now of ['2026-10-17T21:00:00+08:00', '2026-10-18T08:00:00+08:00']) {
+      await db.setNow(now);
+      expect((await office()).subject).toBe('【Office Hour】下週 2 場（10/19–10/25）');
+    }
+    // sent by hand on the Monday: the week has started
+    await db.setNow('2026-10-19T09:00:00+08:00');
+    const m = await office();
+    expect(m.subject).toBe('【Office Hour】本週 2 場（10/19–10/25）');
+    expect(m.text).toContain('這週（10/19–10/25）有 2 場 Office Hour');
+    expect(m.html).toContain('這週有 <span');
+    await db.setNow('2026-10-14T09:00:00+08:00');
+  });
+
   it('sends each message once a week, unless forced', async () => {
     for (const m of await outbox('weekly')) {
       await db.sql('select app.mail_sent($1, $2::date, $3, $4, $5)', ['weekly', m.week, m.to, m.subject, m.count]);
@@ -148,9 +166,11 @@ describe('weekly email', () => {
   it('previews everything for the admins first', async () => {
     const [p] = await outbox('preview');
     expect(p.to).toBe('ta@example.com');
-    expect(p.subject).toBe('【預覽】週一 08:00 要寄出的 Office Hour 通知（10/19–10/25）');
+    expect(p.subject).toBe('【預覽】週日 08:00 要寄出的 Office Hour 通知（10/19–10/25）');
+    expect(p.html).toContain('週日 08:00 會寄給：');
+    expect(p.html).toContain('要調整場次，請在週日 08:00 前到排程頁修改');
     expect(p.html).toContain('這是預覽');
-    expect(p.html).toContain('prolong@example.com（Prolong）：【Office Hour】Prolong 本週 1 場（10/19–10/25）');
+    expect(p.html).toContain('prolong@example.com（Prolong）：【Office Hour】Prolong 下週 1 場（10/19–10/25）');
     expect(p.html).toContain('第 1 組「南宜到達的斜上方」');
     expect(p.html).toContain('</ul><div style="margin-top:8px;">要調整場次');
     expect(p.html.indexOf('這是預覽')).toBeLessThan(p.html.indexOf('max-width:600px;background-color:#ffffff')); // above the card

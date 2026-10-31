@@ -1,16 +1,17 @@
 # The weekly email to the teachers (scripts/send-mail.mjs). GitHub starts
 # scheduled runs late at busy times, so each one starts early and the
 # script waits for the exact time in Taipei:
-#   Sunday 18:00  a preview of everything to the admins' mailbox
-#   Monday 08:00  each recipient's week of sessions
+#   Saturday 21:00  a preview of everything to the admins' mailbox (an hour
+#                   after next week's bookings close)
+#   Sunday 08:00    each recipient's sessions for the week starting Monday
 # Needs the repository secrets GMAIL_USER and GMAIL_APP_PASSWORD (a Gmail
 # app password) besides SUPABASE_DB_PASSWORD.
 name: Weekly email
 
 on:
   schedule:
-    - cron: '38 9 * * 0' # Sunday 17:38 Taipei
-    - cron: '38 23 * * 0' # Monday 07:38 Taipei (Sunday 23:38 UTC)
+    - cron: '38 12 * * 6' # Saturday 20:38 Taipei
+    - cron: '38 23 * * 6' # Sunday 07:38 Taipei (Saturday 23:38 UTC)
   workflow_dispatch:
     inputs:
       kind:
@@ -53,8 +54,8 @@ jobs:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
       - name: Send
         env:
-          KIND: ${{ github.event_name == 'workflow_dispatch' && inputs.kind || (github.event.schedule == '38 9 * * 0' && 'preview' || 'weekly') }}
-          SEND_AT: ${{ github.event_name == 'schedule' && (github.event.schedule == '38 9 * * 0' && '18:00' || '08:00') || '' }}
+          KIND: ${{ github.event_name == 'workflow_dispatch' && inputs.kind || (github.event.schedule == '38 12 * * 6' && 'preview' || 'weekly') }}
+          SEND_AT: ${{ github.event_name == 'schedule' && (github.event.schedule == '38 12 * * 6' && '21:00' || '08:00') || '' }}
           FORCE: ${{ inputs.force && '1' || '' }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
           ONLY: ${{ inputs.only }}

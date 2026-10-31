@@ -2,7 +2,7 @@
 
 TN0006「跨域數位製作實務」的 Office Hour 預約平台，名稱是「叁式 ULTRACOMBOS One Hour a Week」（`src/config.ts` 的 `APP_NAME` 和手機用的 `APP_SHORT_NAME`，另外寫在 `index.html`、`public/manifest.webmanifest`、`scripts/send-mail.mjs` 的寄件人名稱，以及信件頁首的 `app.mail_message`／`app.mail_remind`，改名時要新增 migration）。規則是每組有一個固定時段（業師、星期、時間，每次 60 分鐘），每週決定要不要用：送出就排定（設定裡 `slot_minutes` 60、每週上限 1、每天上限 1）。所有畫面即時同步。使用說明、架構圖、展示腳本在 `README.md`。
 
-每週的節奏：之後的每一週都能先約，每週只看自己的截止時間（`app.week_bookable()`；`app.booking_week()` 是下一個還沒截止的週，學生畫面預設和 Discord 詢問用它）；各組在**前一週的週六 20:00** 前按「預約這週」（`oh_booking_save`，題目、想問的問題、進度、雲端連結都必填，直接建立已確認的場次）或「這週不約」（`oh_booking_skip`，`requests.status = 'skipped'`）。截止（設定的 `close_dow`／`close_time`，`app.week_deadline()`）後不能再改（`WEEK_LATE`），已排定的場次在開始前 `cancel_hours` 小時可以自己取消。固定時段那天是全天休息日（`app.fixed_holiday()`）就停一次（`WEEK_HOLIDAY`）。業師臨時有事時，助教在排程頁「代班」「改期」「取消」（`oh_admin_move`、`oh_admin_remove`）；學生之後修改內容不會蓋掉助教的調整。機器人在各組的 Discord 頻道：**週五 08:00** 問下週要不要約，可以直接在 Discord 預約（表單）或不約；**週六 20:00** 截止後訊息改成結果；**週日 08:00** 告訴各組下週的結果（有沒有約都發）；**場次當天 08:00** 提醒那一組。**週日 18:00** 寄預覽到助教信箱，**週一 08:00** 寄信給收件人。週日 12:00 的審核提醒（`app.mail_remind`）已經停用，`lead_days` 也不用了。
+每週的節奏：之後的每一週都能先約，每週只看自己的截止時間（`app.week_bookable()`；`app.booking_week()` 是下一個還沒截止的週，學生畫面預設和 Discord 詢問用它）；各組在**前一週的週六 20:00** 前按「預約這週」（`oh_booking_save`，題目、想問的問題、進度、雲端連結都必填，直接建立已確認的場次）或「這週不約」（`oh_booking_skip`，`requests.status = 'skipped'`）。截止（設定的 `close_dow`／`close_time`，`app.week_deadline()`）後不能再改（`WEEK_LATE`），已排定的場次在開始前 `cancel_hours` 小時可以自己取消。固定時段那天是全天休息日（`app.fixed_holiday()`）就停一次（`WEEK_HOLIDAY`）。業師臨時有事時，助教在排程頁「代班」「改期」「取消」（`oh_admin_move`、`oh_admin_remove`）；學生之後修改內容不會蓋掉助教的調整。機器人在各組的 Discord 頻道：**週五 08:00** 問下週要不要約，可以直接在 Discord 預約（表單）或不約；**週六 20:00** 截止後訊息改成結果；**週日 08:00** 告訴各組下週的結果（有沒有約都發）；**場次當天 08:00** 提醒那一組。**週六 21:00** 寄預覽到助教信箱，**週日 08:00** 寄下週的場次給收件人（`app.mail_week()`，信裡寫「下週」；週一手動寄才寫「這週」），時間寫在 `mail.yml`、`src/config.ts` 的 `MAIL_PREVIEW`／`MAIL_SEND` 和信件內容，`tests/mail-schedule.test.ts` 檢查前兩者一致。週日 12:00 的審核提醒（`app.mail_remind`）已經停用，`lead_days` 也不用了。
 
 老師端是同一個畫面：三位老師（Joseph、Prolong、Tim）和共用帳號「叁式」（`app.teachers.team = true`，給業師公司或老師助理）登入後都看到三位老師的全部場次。共用帳號不會被排進任何場次、不能有開放時段（`app.not_team()` trigger），行事曆包含所有老師的場次。
 
@@ -46,7 +46,7 @@ TN0006「跨域數位製作實務」的 Office Hour 預約平台，名稱是「�
 
 | 位置 | 內容 |
 |---|---|
-| `supabase/migrations/` | 資料表、API 函式、Discord、登入期限、私有即時頻道、行事曆、名字登入與學生名單、TD 課表、單元與類型比例、老師共用畫面、每週截止、每週寄信、固定時段與業師討論室、提前預約、Discord 每週詢問 |
+| `supabase/migrations/` | 資料表、API 函式、Discord、登入期限、私有即時頻道、行事曆、名字登入與學生名單、TD 課表、單元與類型比例、老師共用畫面、每週截止、每週寄信、固定時段與業師討論室、提前預約、Discord 每週詢問、週六預覽與週日寄信 |
 | `supabase/functions/discord/` | Discord 按鈕和表單的 Edge Function（Deno，有自己的 `deno.json`） |
 | `supabase/seed.sql` | 課程初始資料 |
 | `src/db/sql.ts` | 示範模式的 bootstrap 和 `MIGRATIONS` 清單 |
