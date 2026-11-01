@@ -327,3 +327,70 @@ describe('Discord reminders', () => {
     expect(st.posts.find((p: any) => p.kind === 'today')).toMatchObject({ group_no: 1, week: '10/20（二）' });
   });
 });
+
+describe('Discord 08:00 messages from the database', () => {
+  let db: TestDb;
+  const FAKE_PG_NET = `
+    create schema net;
+    create table net.sent (id bigint generated always as identity, url text, body jsonb);
+    create table net._http_response (id bigint, status_code int, error_msg text);
+    create function net.http_post(url text, body jsonb default '{}', params jsonb default '{}',
+                                  headers jsonb default '{}', timeout_milliseconds int default 5000)
+    returns bigint language sql as $$ insert into net.sent (url, body) values (url, body) returning id $$;`;
+  const hooks = () => db.one('select app.discord_morning_hooks() as n').then((r) => r.n);
+  const sent = () => db.sql('select id, url, body from net.sent order by id');
+
+  beforeAll(async () => {
+    db = await makeDb();
+    await db.pg.exec(FAKE_PG_NET);
+    await db.setNow('2026-10-16T08:00:00+08:00');
+    await db.sql(`update app.groups set webhook = 'https://discord.com/api/webhooks/' || no || '/tok' || no where true`);
+    for (const g of await db.sql('select id, no from app.groups')) await db.sql('select app.discord_set_channel($1, $2, true)', [g.id, `30000000000000000${g.no}`]);
+    const c = await db.codes();
+    const w7 = await weekId(db, 'W7');
+    for (const no of [1, 4])
+      await db.call('oh_booking_save', { p_token: await join(db, c.groups[no], `組員${no}`), p_week: w7, p_topic: `第${no}組題目`, p_questions: 'q', p_progress: 'p', p_link: 'https://drive.google.com/x' });
+  });
+
+  it("posts Sunday's outcome through each group's webhook at 08:00, and records it", async () => {
+    await db.setNow('2026-10-18T08:00:00+08:00');
+    expect(await hooks()).toBe(7);
+    const s = await sent();
+    expect(s.map((x: any) => x.url)).toEqual([1, 2, 3, 4, 5, 6, 7].map((no) => `https://discord.com/api/webhooks/${no}/tok${no}`));
+    expect(s[0].body).toMatchObject({ username: 'Office Hour', allowed_mentions: { parse: [] } });
+    expect(s[0].body.content).toContain('## 📌 下週（W7）的 Office Hour\n### 10/20（二）17:00–18:00');
+    expect(s[1].body.content).toContain('## 📌 下週（W7）沒有 Office Hour');
+    // the GitHub run that comes later finds nothing left to send
+    expect(await db.sql('select * from app.discord_summary_outbox()')).toEqual([]);
+    expect(await hooks()).toBe(0);
+  });
+
+  it('lets the bot send what a webhook turned down', async () => {
+    const s = await sent();
+    for (const x of s.slice(0, 6)) await db.sql('insert into net._http_response (id, status_code) values ($1, 204)', [x.id]);
+    await db.sql('insert into net._http_response (id, status_code) values ($1, 404)', [s[6].id]);
+    await db.setNow('2026-10-18T08:05:00+08:00');
+    expect((await db.one('select app.discord_hook_check() as n')).n).toBe(1);
+    expect((await db.sql('select group_no from app.discord_summary_outbox()')).map((r: any) => r.group_no)).toEqual([7]);
+  });
+
+  it('reminds a 10:00 session at 08:00, before the late GitHub run would have skipped it', async () => {
+    await db.setNow('2026-10-22T08:00:00+08:00'); // Thursday: group 4 meets at 10:00
+    expect(await hooks()).toBe(1);
+    const last = (await sent()).at(-1);
+    expect(last.url).toBe('https://discord.com/api/webhooks/4/tok4');
+    expect(last.body.content).toContain('## ⏰ 今天 10/22（四）有 Office Hour\n### 10:00–11:00\n第 4 組「閃身部」 · Prolong');
+    expect(await db.sql('select * from app.discord_today_outbox()')).toEqual([]);
+    // no answer from Discord at all counts as turned down
+    await db.setNow('2026-10-22T08:05:00+08:00');
+    expect((await db.one('select app.discord_hook_check() as n')).n).toBe(1);
+    expect((await db.sql('select group_no from app.discord_today_outbox()')).map((r: any) => r.group_no)).toEqual([4]);
+  });
+
+  it('does nothing without pg_net or pg_cron, as in the demo', async () => {
+    const plain = await makeDb();
+    expect((await plain.one('select app.discord_morning_hooks() as n')).n).toBe(0);
+    expect((await plain.one('select app.discord_hook_check() as n')).n).toBe(0);
+    expect((await plain.one('select app.discord_cron_on() as on')).on).toBe(false);
+  });
+});

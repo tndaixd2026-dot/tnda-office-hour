@@ -410,6 +410,8 @@ export interface DiscordState {
   name: string | null;
   endpoint: string | null;
   checked_at: string | null;
+  /** the database sends the 08:00 messages itself (pg_cron), on the minute */
+  cron: boolean;
   /** the week Friday's message is about */
   week: { id: number; label: string; start: string; deadline: string } | null;
   /** Friday's question, Sunday's outcome and the day's reminder, for one group */

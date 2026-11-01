@@ -63,6 +63,13 @@ export function DiscordPage() {
         ) : (
           <SetupSteps />
         )}
+        {st.ready && (
+          <p class="small muted">
+            {st.cron
+              ? '當天提醒和週日的下週結果由資料庫在 08:00 準時發出；週五的詢問和週六的截止由 GitHub 排程發出，可能晚幾個小時'
+              : '所有訊息都由 GitHub 排程發出，忙碌時可能晚幾個小時'}
+          </p>
+        )}
         {week && (
           <p class="small muted">
             下一次：{dayLabel(addDays(week.deadline.slice(0, 10), -1))} 08:00 詢問 {week.label ? `${week.label} ` : ''}
