@@ -6,7 +6,7 @@ import { go, href } from '../../app/router';
 import { local } from '../../app/store';
 import { csvText, download } from '../../lib/files';
 import { dayOfWeek, deadlineText, timeRange } from '../../lib/format';
-import { addDays, dayLabel, DOW, isoDow, localStamp, mdPad } from '../../lib/time';
+import { addDays, addMinutes, dayLabel, DOW, isoDow, localStamp, mdPad } from '../../lib/time';
 import { ask, confirm, openDialog } from '../../ui/dialog';
 import { Icon } from '../../ui/icons';
 import { Btn, CopyBtn, Empty, Loading, Place, WeekStrip, safeHref } from '../../ui/kit';
@@ -128,7 +128,7 @@ function BoardView({ st, reload }: { st: AdminState; reload: () => void }) {
       <>
         <div class="stack tight">
           <p class="eyebrow">
-            {groupName(st.groups, a.group_id)} · {dayLabel(a.d)} {timeRange(a.t, mins)} · 原本 {tName(a.teacher_id)}
+            {groupName(st.groups, a.group_id)} · {dayLabel(a.d)} {timeRange(a.t, a.minutes ?? mins)} · 原本 {tName(a.teacher_id)}
           </p>
           <h2>請哪位業師代班？</h2>
           <p class="small muted">時間不變，學生畫面會換成代班業師的討論室</p>
@@ -177,7 +177,7 @@ function BoardView({ st, reload }: { st: AdminState; reload: () => void }) {
       <>
         <div class="stack tight">
           <p class="eyebrow">
-            {groupName(st.groups, a.group_id)} · 原本 {dayLabel(a.d)} {timeRange(a.t, mins)} · {tName(a.teacher_id)}
+            {groupName(st.groups, a.group_id)} · 原本 {dayLabel(a.d)} {timeRange(a.t, a.minutes ?? mins)} · {tName(a.teacher_id)}
           </p>
           <h2>改到什麼時候？</h2>
         </div>
@@ -248,7 +248,7 @@ function BoardView({ st, reload }: { st: AdminState; reload: () => void }) {
         name: r.g.name,
         state: STATE_TEXT[r.state](open),
         date: a?.d ?? '',
-        time: a ? timeRange(a.t, mins) : '',
+        time: a ? timeRange(a.t, a.minutes ?? mins) : '',
         teacher: a ? tName(a.teacher_id) : '',
         topic: st.requests.find((x) => x.group_id === r.g.id && x.status === 'open')?.topic ?? '',
       };
@@ -391,11 +391,16 @@ function GroupRow({
   const mins = st.settings.slot_minutes;
   const req = st.requests.find((x) => x.group_id === r.g.id && x.status === 'open');
   const a = r.session ?? r.cancelled;
-  const moved = a && r.fixed && (a.d !== r.fixed.d || a.t !== r.fixed.t);
+  // half of a shared fixed hour is still in its place
+  const split = Boolean(a && r.fixed && a.minutes != null && a.d === r.fixed.d && a.t >= r.fixed.t && a.t < addMinutes(r.fixed.t, mins));
+  const moved = a && r.fixed && !split && (a.d !== r.fixed.d || a.t !== r.fixed.t);
   const swapped = a && r.fixed && a.teacher_id !== r.fixed.teacher;
+  const shared = st.groups.filter(
+    (x) => x.id !== r.g.id && x.active && x.teacher_id === r.g.teacher_id && x.slot_dow === r.g.slot_dow && x.slot_time === r.g.slot_time,
+  );
   const past = a ? `${a.d} ${a.t}` < nowStamp : false;
   const leave = a ? st.closures.find((c) => c.teacher_id === a.teacher_id && c.d === a.d) : undefined;
-  const offHours = r.session && !st.slots.some((s) => s.d === r.session!.d && s.t === r.session!.t && s.teachers.includes(r.session!.teacher_id));
+  const offHours = r.session && !split && !st.slots.some((s) => s.d === r.session!.d && s.t === r.session!.t && s.teachers.includes(r.session!.teacher_id));
   return (
     <section class="card stack" aria-label={groupName(st.groups, r.g.id)}>
       <div class="row between wrap">
@@ -411,6 +416,7 @@ function GroupRow({
           <>
             固定時段：{dayLabel(r.fixed.d)} <span class="mono">{timeRange(r.fixed.t, mins)}</span> · {tName(r.fixed.teacher)}
             {r.holiday ? `（${r.holiday}）` : ''}
+            {shared.length > 0 && ` · 和${shared.map((x) => `第 ${x.no} 組`).join('、')}共用`}
           </>
         ) : (
           <>

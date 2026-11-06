@@ -40,6 +40,12 @@ export function fixedText(f: { dow: number; t: string }, minutes: number): strin
   return `每${DOW[f.dow]} ${timeRange(f.t, minutes)}`;
 }
 
+/** "和第 7 組共用這一小時：…" for a fixed hour other groups share, else null. */
+export function sharedText(shared: number[] | undefined, minutes: number): string | null {
+  if (!shared?.length) return null;
+  return `和${shared.map((n) => `第 ${n} 組`).join('、')}共用這一小時：只有一組預約就討論 ${minutesText(minutes)}，都預約就各 ${minutesText(Math.floor(minutes / (shared.length + 1)))}，先約的先開始`;
+}
+
 /** The date of a weekday (1 = Monday) in the week starting on Monday `start`. */
 export function dayOfWeek(start: string, dow: number): string {
   return addDays(start, dow - 1);

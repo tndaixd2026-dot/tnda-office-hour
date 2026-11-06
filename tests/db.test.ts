@@ -620,7 +620,7 @@ describe('weekly booking', () => {
   it("starts from one hour a week, each group's fixed slot and each PM's room", async () => {
     const st = await db.call('oh_student_state', { p_token: g2 });
     expect(st.settings).toMatchObject({ slot_minutes: 60, week_cap: 1, day_cap: 1, close_dow: 6, close_time: '20:00', show_teacher_names: true });
-    expect(st.fixed).toEqual({ dow: 3, t: '10:00', teacher: 'Prolong', room: ROOM.prolong });
+    expect(st.fixed).toEqual({ dow: 3, t: '10:00', teacher: 'Prolong', room: ROOM.prolong, shared: [] });
     expect(st.week_id).toBe(w7);
     expect(st.weeks[0]).toMatchObject({ label: 'W7', bookable: true, deadline: '2026-10-17 20:00', status: null, holiday: null });
     // every later week is open too, each until its own deadline

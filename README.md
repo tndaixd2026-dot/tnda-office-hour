@@ -91,6 +91,7 @@ flowchart LR
 - **行事曆訂閱也是同一套 SQL。** `oh_calendar` 直接由 PostgREST 以 `text/calendar` 回應（`"*/*"` media type handler），每位老師、每一組各有一條可作廢的私密網址，不需要另外的伺服器。TD 專班課表的 `oh_lessons_calendar` 用同一個方法，但是公開的，所有人共用一條網址。
 - **固定時段，送出就排定。** 每組的業師、星期、時間存在 `app.groups`；學生按「預約這週」時 `oh_booking_save` 直接在固定時段建立已確認的場次，「這週不約」由 `oh_booking_skip` 記下並拿掉那週的場次。兩者都轉給 `app.booking_save`／`app.booking_skip`，Discord 的按鈕走的是同一套規則。之後的每一週都能先約，每週只看自己的截止時間（`app.week_bookable()`），固定時段那天放假就停一次。助教的代班、改期、取消改的是同一筆場次，學生之後修改內容也不會蓋掉。
 - **Discord 每週詢問。** `scripts/discord-ask.mjs`（GitHub Actions）用機器人的 Token 發訊息，訊息內容由資料庫的 `app.discord_message` 產生；按鈕和表單送到 Supabase Edge Function `supabase/functions/discord`，它只驗證 Discord 的簽章，再交給資料庫的 `app.discord_interaction` 回應。每組的頻道從那組連結的 Webhook 查出來，不用另外設定。
+- **兩組共用一小時。** 兩組可以設成同一個固定時段，只有一組預約就討論一小時，兩組都預約就各 30 分鐘，先約的先開始；每場有自己的長度（`app.appointments.minutes`），畫面、行事曆、信和 Discord 都照它顯示。
 - **每位業師一間討論室。** 每位老師有自己的 Google Meet 連結（`app.teachers.room`），學生、老師、行事曆和每週的信都顯示那一場業師的討論室，所以同一時段可以有好幾組。
 - **閃身步排程法（舊制）。** 改成固定時段之前，學生勾選可以的時段，再用最大流排程（`src/lib/scheduler.ts`），現在畫面上已經不用了。
 

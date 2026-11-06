@@ -399,7 +399,7 @@ function SlotForm({ g, cfg, close, save }: { g: ConfigGroup; cfg: AdminConfig; c
       {!open && <p class="small" style={{ color: 'var(--warn)' }}>這個時間不在 {name} 的開放時段，可以先到「時段與週次」加上</p>}
       {clash.length > 0 && (
         <p class="small" style={{ color: 'var(--warn)' }}>
-          {clash.map((x) => `第 ${x.no} 組`).join('、')} 也是這個時段
+          和{clash.map((x) => `第 ${x.no} 組`).join('、')}共用這一小時：只有一組預約就討論 1 小時，都預約就各 {Math.floor(60 / (clash.length + 1))} 分鐘，先約的先開始
         </p>
       )}
       <div class="actions">

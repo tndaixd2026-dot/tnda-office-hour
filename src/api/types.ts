@@ -99,6 +99,8 @@ export interface StudentSlot extends SlotRef {
 }
 
 export interface StudentAppointment {
+  /** its own length in minutes when shorter than the slot (a shared hour), else null */
+  minutes?: number | null;
   id: number;
   week_id: number;
   d: string;
@@ -120,7 +122,8 @@ export interface StudentState {
   /** the group's PM, when teacher names are shown to students */
   pair: string | null;
   /** the group's fixed hour a week; null until the admins set it */
-  fixed: { dow: number; t: string; teacher: string | null; room: string | null } | null;
+  /** shared: the other groups with the same fixed hour (one booking has it all, more split it) */
+  fixed: { dow: number; t: string; teacher: string | null; room: string | null; shared?: number[] } | null;
   members: string[];
   week_id: number | null;
   weeks: StudentWeek[];
@@ -132,6 +135,8 @@ export interface StudentState {
 }
 
 export interface TeacherSession {
+  /** its own length in minutes when shorter than the slot (a shared hour), else null */
+  minutes?: number | null;
   id: number;
   d: string;
   t: string;
@@ -175,6 +180,8 @@ export interface TeacherState {
 }
 
 export interface Appointment {
+  /** its own length in minutes when shorter than the slot (a shared hour), else null */
+  minutes?: number | null;
   id: number;
   week_id: number;
   group_id: number;

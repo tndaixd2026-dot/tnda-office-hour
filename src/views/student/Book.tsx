@@ -5,7 +5,7 @@ import { clock, useApi, useBusy } from '../../app/hooks';
 import { go } from '../../app/router';
 import { useApp } from '../../app/session';
 import { local } from '../../app/store';
-import { dayOfWeek, deadlineText, timeRange } from '../../lib/format';
+import { dayOfWeek, deadlineText, sharedText, timeRange } from '../../lib/format';
 import { addDays, agoText, dayLabel, mdPad } from '../../lib/time';
 import { confirm } from '../../ui/dialog';
 import { RECORDING_NOTE } from '../../config';
@@ -227,6 +227,7 @@ export function Book({ st, weekId, reload }: { st: StudentState; weekId: number;
             <p class="title-l">
               {dayLabel(day)} <span class="mono">{timeRange(fixed.t, mins)}</span>
             </p>
+            {sharedText(fixed.shared, mins) && <p class="small">{sharedText(fixed.shared, mins)}</p>}
             <div class="stack tight">
               {fixed.teacher && (
                 <span class="row" style={{ gap: '8px' }}>

@@ -4,7 +4,7 @@ import { clock, useApi, useBusy, useDiff, useLive, useTick } from '../../app/hoo
 import { go } from '../../app/router';
 import { signOut, updateSession } from '../../app/session';
 import { downloadIcs } from '../../lib/files';
-import { closeRuleText, dayOfWeek, deadlineText, fixedText, timeRange, minutesText } from '../../lib/format';
+import { closeRuleText, dayOfWeek, deadlineText, fixedText, sharedText, timeRange, minutesText } from '../../lib/format';
 import { addDays, addMinutes, agoText, dayLabel, instant, mdPad, relativeDay, tzNote, untilText } from '../../lib/time';
 import { ask, confirm } from '../../ui/dialog';
 import { toast } from '../../ui/toast';
@@ -162,7 +162,7 @@ function Home({ st, setWeek, reload }: { st: StudentState; setWeek: (id: number)
   const tz = st.clock.tz;
   const fixed = st.fixed;
   const week = st.weeks.find((w) => w.id === st.week_id) ?? null;
-  const upcoming = st.appointments.filter((a) => a.status === 'confirmed' && sessionEnd(a, mins, tz) > now);
+  const upcoming = st.appointments.filter((a) => a.status === 'confirmed' && sessionEnd(a, a.minutes ?? mins, tz) > now);
   const next = upcoming[0];
   const req = st.request;
   const weekAppts = st.appointments.filter((a) => a.week_id === st.week_id);
@@ -207,7 +207,7 @@ function Home({ st, setWeek, reload }: { st: StudentState; setWeek: (id: number)
         uid: `oh-${a.id}@tnda-office-hour`,
         d: a.d,
         t: a.t,
-        minutes: mins,
+        minutes: a.minutes ?? mins,
         tz,
         title: `Office Hour · 第 ${g.no} 組${a.topic ? `｜${a.topic}` : ''}`,
         location: a.room ?? st.settings.location,
@@ -258,7 +258,7 @@ function Home({ st, setWeek, reload }: { st: StudentState; setWeek: (id: number)
                 {rel ? `${rel}・` : ''}
                 {dayLabel(next.d)}
               </span>
-              <span class="num-xl">{timeRange(next.t, mins)}</span>
+              <span class="num-xl">{timeRange(next.t, next.minutes ?? mins)}</span>
               {tzNote(tz) && <span class="small" style={{ opacity: 0.7 }}>以上為{tzNote(tz)}</span>}
             </div>
           </div>
@@ -315,6 +315,7 @@ function Home({ st, setWeek, reload }: { st: StudentState; setWeek: (id: number)
             你們的固定時段{fixed.teacher ? ` · ${fixed.teacher}` : ''}
           </p>
           <h1 class="title-l">{fixedText(fixed, mins)}</h1>
+          {sharedText(fixed.shared, mins) && <p class="small">{sharedText(fixed.shared, mins)}</p>}
           <p class="muted">每週要不要約，在前一週的週六 20:00 前決定，之後幾週也可以先約好。要約就寫好題目、想問的問題、進度和雲端連結，送出就排定</p>
           {firstBookable && (
             <div class="row wrap">
@@ -358,6 +359,7 @@ function Home({ st, setWeek, reload }: { st: StudentState; setWeek: (id: number)
                     {fixed.teacher ? ` · ${fixed.teacher}` : ''}
                   </span>
                 )}
+                {fixed && !week.holiday && sharedText(fixed.shared, mins) && <span class="small muted">{sharedText(fixed.shared, mins)}</span>}
                 {week.note && <span class="small muted">{week.note}</span>}
                 {week.open && fixed && !week.holiday && (
                   <span class="small muted">
@@ -522,7 +524,7 @@ function Home({ st, setWeek, reload }: { st: StudentState; setWeek: (id: number)
 }
 
 function ApptRow({ a, mins, tz, now, onCancel }: { a: StudentAppointment; mins: number; tz: string; now: number; onCancel: () => void }) {
-  const end = instant(a.d, addMinutes(a.t, mins), tz);
+  const end = instant(a.d, addMinutes(a.t, a.minutes ?? mins), tz);
   const past = end <= now;
   const cancelled = a.status === 'cancelled';
   return (
