@@ -18,9 +18,9 @@ on:
   workflow_dispatch:
     inputs:
       kind:
-        description: 'setup：連接機器人、找出各組的頻道，不發訊息；ask：發下一週的詢問；summary：發下週的結果；today：提醒今天有場次的組；refresh：把還沒截止的詢問更新成現在的樣子；close：把已截止的詢問改成結果（每則訊息每組只發一次）'
+        description: 'setup：連接機器人、找出各組的頻道，不發訊息；ask：發下一週的詢問；summary：發下週的結果；today：提醒今天有場次的組；refresh：把還沒截止的詢問更新成現在的樣子；close：把已截止的詢問改成結果；diagnose：查機器人為什麼看不到某組的頻道（每則訊息每組只發一次）'
         type: choice
-        options: [setup, ask, summary, today, refresh, close]
+        options: [setup, ask, summary, today, refresh, close, diagnose]
         default: setup
       only:
         description: '只發給這一組（填組別編號，例如 2），空白就發給全部'

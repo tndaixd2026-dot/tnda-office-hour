@@ -11,6 +11,9 @@
 //               with the buttons to book or skip it (once per group and week)
 //   KIND=summary  setup, then each group's outcome for next week
 //   KIND=today  setup, then a reminder to each group with a session today
+//   KIND=diagnose  setup, then explain each channel the bot cannot see: Discord's
+//               answer, the channel's permission overwrites against a channel that
+//               works, the bot's roles, and whether the webhook moved channels
 //   KIND=refresh  setup, then redraw the messages still open as they stand
 //               now (after a change on the site, or to the message's layout)
 //   KIND=close  setup, then rewrite the messages of the weeks that have
@@ -31,7 +34,7 @@ import pg from 'pg';
 
 const API = 'https://discord.com/api/v10';
 const on = (v) => v === '1' || v === 'true';
-const kind = ['morning', 'ask', 'summary', 'today', 'refresh', 'close'].includes(process.env.KIND) ? process.env.KIND : 'setup';
+const kind = ['morning', 'ask', 'summary', 'today', 'refresh', 'close', 'diagnose'].includes(process.env.KIND) ? process.env.KIND : 'setup';
 const dry = on(process.env.DRY_RUN);
 const force = on(process.env.FORCE);
 const only = /^\d+$/.test(process.env.ONLY?.trim() ?? '') ? Number(process.env.ONLY) : null;
@@ -163,6 +166,7 @@ if (!registered && bot.interactions_endpoint_url) {
 console.log(`bot: ${bot.name}, button presses ${registered ? 'connected' : 'not connected'}`);
 
 const unseen = [];
+const resolved = [];
 let seen = 0;
 for (const g of (await db.query('select * from app.discord_webhooks()')).rows) {
   const hook = await fetch(g.webhook).then(async (r) => (r.ok ? r.json() : null), () => null);
@@ -173,11 +177,52 @@ for (const g of (await db.query('select * from app.discord_webhooks()')).rows) {
   }
   const ch = await discord('GET', `/channels/${hook.channel_id}`);
   await db.query('select app.discord_set_channel($1, $2, $3)', [g.group_id, hook.channel_id, ch.ok]);
+  resolved.push({ no: g.group_no, group: g.group_id, channel: hook.channel_id, guild: hook.guild_id, ok: ch.ok, why: why(ch) });
   if (ch.ok) seen++;
-  else unseen.push(g.group_no);
+  else unseen.push(`${g.group_no} (${why(ch)})`);
 }
 console.log(`channels: the bot sees ${seen}${unseen.length ? `, not group ${unseen.join(', ')}` : ''}`);
-if (unseen.length) console.log(`::warning::機器人看不到第 ${unseen.join('、')} 組的頻道：請在那些頻道的權限加入機器人（檢視頻道、傳送訊息）`);
+if (unseen.length) console.log(`::warning::機器人看不到第 ${unseen.map((u) => u.split(' ')[0]).join('、')} 組的頻道：請在那些頻道的權限加入機器人（檢視頻道、傳送訊息）`);
+
+if (kind === 'diagnose') {
+  // what Discord says about each group's channel, read-only; channel and role names only
+  const VIEW = 1n << 10n;
+  const SEND = 1n << 11n;
+  const ADMIN = 1n << 3n;
+  const guild = resolved.find((r) => r.guild)?.guild;
+  const botUser = (await discord('GET', '/users/@me')).data;
+  const member = (await discord('GET', `/guilds/${guild}/members/${botUser?.id}`)).data;
+  const roles = (await discord('GET', `/guilds/${guild}/roles`)).data ?? [];
+  const channels = (await discord('GET', `/guilds/${guild}/channels`)).data ?? [];
+  const roleName = (id) => (id === guild ? '@everyone' : roles.find((r) => r.id === id)?.name ?? `role ${id}`);
+  const mine = new Set(member?.roles ?? []);
+  console.log(`bot roles: ${[...mine].map(roleName).join(', ') || '(none)'}; guild channels listed: ${channels.length}`);
+  const bits = (allow, deny) =>
+    [VIEW, SEND].map((b, i) => `${i ? 'send' : 'view'}:${BigInt(allow) & b ? 'allow' : BigInt(deny) & b ? 'deny' : '-'}`).join(' ');
+  for (const r of resolved) {
+    const c = channels.find((x) => x.id === r.channel);
+    const before = (await db.query(
+      `select channel_id from (select channel_id, posted_at from app.discord_posts where group_id = $1
+        union all select channel_id, posted_at from app.discord_notes where group_id = $1 and message_id not like 'hook:%') x
+        order by posted_at desc limit 1`, [r.group])).rows[0]?.channel_id;
+    let p = roles.filter((x) => x.id === guild || mine.has(x.id)).reduce((a, x) => a | BigInt(x.permissions), 0n);
+    for (const o of (c?.permission_overwrites ?? []).filter((o) => o.id === guild)) p = (p & ~BigInt(o.deny)) | BigInt(o.allow);
+    let ra = 0n;
+    let rd = 0n;
+    for (const o of (c?.permission_overwrites ?? []).filter((o) => o.type === 0 && mine.has(o.id))) { ra |= BigInt(o.allow); rd |= BigInt(o.deny); }
+    p = (p & ~rd) | ra;
+    for (const o of (c?.permission_overwrites ?? []).filter((o) => o.type === 1 && o.id === botUser?.id)) p = (p & ~BigInt(o.deny)) | BigInt(o.allow);
+    if (p & ADMIN) p |= VIEW | SEND;
+    const parent = channels.find((x) => x.id === c?.parent_id);
+    console.log(`第 ${r.no} 組: ${r.ok ? 'sees' : `refused ${r.why}`}; channel ${c ? `#${c.name}` : 'not in the guild list'}`
+      + `${parent ? ` in ${parent.name}` : ''}; webhook channel ${before ? (before === r.channel ? 'same as the last bot post' : 'DIFFERENT from the last bot post') : 'never posted by the bot'}`
+      + `; computed for the bot: view ${p & VIEW ? 'yes' : 'NO'}, send ${p & SEND ? 'yes' : 'NO'}`);
+    for (const o of c?.permission_overwrites ?? []) {
+      const who = o.type === 0 ? roleName(o.id) : o.id === botUser?.id ? 'member: the bot' : 'member: someone';
+      console.log(`    overwrite ${who}: ${bits(o.allow, o.deny)}`);
+    }
+  }
+}
 
 // ---- post, redraw or close ----
 if (process.env.SEND_AT && !dry && kind !== 'setup') {
