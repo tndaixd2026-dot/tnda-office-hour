@@ -18,7 +18,7 @@ export function Overview() {
   const total = groups.reduce((n, g) => n + g.total, 0);
   const engaged = groups.filter((g) => g.total > 0).length;
   const maxTotal = Math.max(1, ...groups.map((g) => g.total));
-  const waiting = st.weeks.reduce((n, w) => n + Math.max(0, w.requests - w.scheduled), 0);
+  const skipped = st.weeks.reduce((n, w) => n + w.skipped, 0);
   const tName = (id: number) => st.teachers.find((t) => t.id === id)?.name ?? '';
   // staff signing in on a new device is noise in the feed
   const feed = st.events.filter((e) => !(e.kind === 'member.joined' && e.role !== 'student'));
@@ -96,10 +96,8 @@ export function Overview() {
           <span class="k">至少約過一次的組</span>
         </div>
         <div class="tile">
-          <span class="v" style={waiting ? { color: 'var(--accent-text)' } : undefined}>
-            {waiting}
-          </span>
-          <span class="k">等待排程的需求</span>
+          <span class="v">{skipped}</span>
+          <span class="k">說「這週不約」的次數</span>
         </div>
       </div>
 

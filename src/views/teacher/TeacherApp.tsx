@@ -77,7 +77,7 @@ function TeacherHome({ st }: { st: TeacherState }) {
   const thisWeek = monday(clock.today);
   const [week, setWeek] = useState(thisWeek);
   const [who, setWho] = useState(0);
-  const end = (s: { d: string; t: string }) => instant(s.d, addMinutes(s.t, mins), tz);
+  const end = (s: { d: string; t: string; minutes?: number | null }) => instant(s.d, addMinutes(s.t, s.minutes ?? mins), tz);
   const live = st.sessions.filter((s) => s.status === 'confirmed');
   const upcoming = live.filter((s) => end(s) > now);
   const next = upcoming.find((s) => !who || s.teacher_id === who);
@@ -104,10 +104,10 @@ function TeacherHome({ st }: { st: TeacherState }) {
               uid: `oh-${s.id}@tnda-office-hour`,
               d: s.d,
               t: s.t,
-              minutes: mins,
+              minutes: s.minutes ?? mins,
               tz,
               title: `Office Hour · ${team ? `${s.teacher} · ` : ''}第 ${s.group.no} 組${s.request?.topic ? `｜${s.request.topic}` : ''}`,
-              location: st.settings.location,
+              location: s.room ?? st.settings.location,
               description: [s.request?.questions && `想問的問題：\n${s.request.questions}`, s.request?.progress, s.request?.link]
                 .filter(Boolean)
                 .join('\n\n'),
@@ -143,7 +143,7 @@ function TeacherHome({ st }: { st: TeacherState }) {
               {relativeDay(next.d, clock.today) ? `${relativeDay(next.d, clock.today)}・` : ''}
               {dayLabel(next.d)}
             </span>
-            <span class="num-xl">{timeRange(next.t, mins)}</span>
+            <span class="num-xl">{timeRange(next.t, next.minutes ?? mins)}</span>
             {tzNote(tz) && <span class="small" style={{ opacity: 0.7 }}>以上為{tzNote(tz)}</span>}
           </div>
           <div class="stack tight">
@@ -155,7 +155,7 @@ function TeacherHome({ st }: { st: TeacherState }) {
           <div class="meta">
             <span>
               <Icon name="pin" size={16} />
-              <Place value={st.settings.location} />
+              <Place value={next.room ?? st.settings.location} />
             </span>
             <span>
               <Icon name="video" size={16} />
@@ -340,13 +340,13 @@ function Overview({ st, days, sessions }: { st: TeacherState; days: string[]; se
 function SessionCard({ s, st, mins, now }: { s: TeacherSession; st: TeacherState; mins: number; now: number }) {
   const [open, setOpen] = useState(false);
   const cancelled = s.status === 'cancelled';
-  const past = instant(s.d, addMinutes(s.t, mins), st.clock.tz) <= now;
+  const past = instant(s.d, addMinutes(s.t, s.minutes ?? mins), st.clock.tz) <= now;
   const r = s.request;
   return (
     <div class={`li top ${cancelled ? 'cancelled' : past ? 'past' : ''}`} style={s.mine && !cancelled ? { boxShadow: 'inset 3px 0 0 var(--accent)' } : undefined}>
       <div class="when">
         <b>{s.t}</b>
-        <span class="mono">{addMinutes(s.t, mins)}</span>
+        <span class="mono">{addMinutes(s.t, s.minutes ?? mins)}</span>
       </div>
       <div class="grow stack tight">
         <div class={`row wrap ${tc(st, s.teacher_id)}`} style={{ gap: '8px' }}>

@@ -1,5 +1,5 @@
 import type { SlotRef } from '../api/types';
-import { addMinutes, dayLabel, isoDow, md, DOW } from './time';
+import { addDays, addMinutes, dayLabel, isoDow, md, DOW } from './time';
 
 /** "週三 10/21  10:00、10:30" lines, one per day. */
 export function slotLines(slots: SlotRef[]): Array<{ d: string; label: string; times: string[] }> {
@@ -35,6 +35,22 @@ export function deadlineText(stamp: string): string {
 }
 
 /** The weekly rule in words: "前一週的週日 12:00" */
+/** "每週三 10:00–11:00" */
+export function fixedText(f: { dow: number; t: string }, minutes: number): string {
+  return `每${DOW[f.dow]} ${timeRange(f.t, minutes)}`;
+}
+
+/** "和第 7 組共用這一小時：…" for a fixed hour other groups share, else null. */
+export function sharedText(shared: number[] | undefined, minutes: number): string | null {
+  if (!shared?.length) return null;
+  return `和${shared.map((n) => `第 ${n} 組`).join('、')}共用這一小時：只有一組預約就討論 ${minutesText(minutes)}，都預約就各 ${minutesText(Math.floor(minutes / (shared.length + 1)))}，先約的先開始`;
+}
+
+/** The date of a weekday (1 = Monday) in the week starting on Monday `start`. */
+export function dayOfWeek(start: string, dow: number): string {
+  return addDays(start, dow - 1);
+}
+
 export function closeRuleText(s: { close_dow: number; close_time: string }): string {
   return `前一週的${DOW[s.close_dow]} ${s.close_time}`;
 }

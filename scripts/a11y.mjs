@@ -36,17 +36,24 @@ for (const scheme of ['light', 'dark']) {
   await page.waitForTimeout(800);
   await scan(page, 'student home');
   await page.locator('.weeks .wk', { hasText: '可預約' }).first().click();
-  await page.getByRole('button', { name: '開始預約' }).click();
-  await page.locator('button.cell').first().click();
+  await page.getByRole('button', { name: '預約這週' }).first().click();
+  await page.getByLabel('想討論的題目').waitFor();
+  await page.getByRole('button', { name: '預約這週' }).click(); // shows every field's error
   await page.waitForTimeout(400);
   await scan(page, 'student booking');
   await page.locator('.demobar').getByRole('button', { name: '助教', exact: true }).click();
   await page.waitForTimeout(900);
   await scan(page, 'admin board');
-  for (const [link, label] of [['總覽與紀錄', 'admin overview'], ['小組與邀請', 'admin groups'], ['老師', 'admin teachers'], ['時段與週次', 'admin calendar'], ['寄信通知', 'admin weekly email'], ['設定', 'admin settings'], ['TD 課表', 'admin TD timetable']]) {
+  for (const [link, label] of [['總覽與紀錄', 'admin overview'], ['小組與邀請', 'admin groups'], ['老師', 'admin teachers'], ['時段與週次', 'admin calendar'], ['寄信通知', 'admin weekly email'], ['Discord 詢問', 'admin Discord ask'], ['設定', 'admin settings'], ['TD 課表', 'admin TD timetable']]) {
     await page.getByRole('complementary', { name: '管理選單' }).getByRole('link', { name: link }).click();
     await page.waitForTimeout(700);
     await scan(page, label);
+    if (label === 'admin groups') {
+      await page.getByRole('button', { name: /第 1 組的固定時段$/ }).click();
+      await page.waitForTimeout(400);
+      await scan(page, 'admin fixed slot form');
+      await page.getByRole('dialog').getByRole('button', { name: '取消' }).click();
+    }
   }
   await page.getByRole('button', { name: '新增一堂' }).click();
   await page.waitForTimeout(400);
@@ -103,6 +110,10 @@ for (const scheme of ['light', 'dark']) {
   await page.locator('iframe.mail-frame').waitFor();
   await page.waitForTimeout(700);
   await scan(page, 'admin weekly email (phone)');
+  await page.evaluate(() => (location.hash = '#/admin/discord'));
+  await page.locator('.dc-msg').first().waitFor();
+  await page.waitForTimeout(500);
+  await scan(page, 'admin Discord ask (phone)');
   await ctx.close();
 }
 await browser.close();

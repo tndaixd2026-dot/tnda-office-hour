@@ -24,6 +24,92 @@ const req = (group_id: number, slots: Array<[string, string]>, want = 1, created
 });
 
 describe('autoSchedule', () => {
+  const paired = (map: Record<number, number[]>) => base().groups.map((g) => ({ ...g, teacher_ids: map[g.id] ?? [] }));
+
+  it("keeps a paired group to its own teacher's slots", () => {
+    const out = autoSchedule(base({
+      groups: paired({ 1: [2] }),
+      slots: [
+        { d: D.mon, t: '17:00', teachers: [1] },
+        { d: D.wed, t: '10:00', teachers: [1, 2] },
+      ],
+      requests: [req(1, [[D.mon, '17:00'], [D.wed, '10:00']])],
+    }));
+    expect(out).toEqual([{ group_id: 1, teacher_id: 2, d: D.wed, t: '10:00' }]);
+  });
+
+  it('uses either of two paired teachers', () => {
+    const out = autoSchedule(base({
+      groups: paired({ 1: [1, 3] }),
+      slots: [
+        { d: D.mon, t: '17:00', teachers: [1] },
+        { d: D.tue, t: '17:00', teachers: [2] },
+        { d: D.thu, t: '16:00', teachers: [3] },
+      ],
+      requests: [req(1, [[D.mon, '17:00'], [D.tue, '17:00'], [D.thu, '16:00']], 2)],
+    }));
+    expect(out).toEqual([
+      { group_id: 1, teacher_id: 1, d: D.mon, t: '17:00' },
+      { group_id: 1, teacher_id: 3, d: D.thu, t: '16:00' },
+    ]);
+  });
+
+  it('gives a paired group its teacher even when another group met that teacher before', () => {
+    const groups = paired({ 1: [1] }).map((g) => (g.id === 2 ? { ...g, recent_teachers: [1] } : g));
+    const out = autoSchedule(base({
+      perSlot: 2,
+      groups,
+      slots: [{ d: D.wed, t: '10:00', teachers: [1, 2] }],
+      requests: [req(2, [[D.wed, '10:00']]), req(1, [[D.wed, '10:00']])],
+    }));
+    expect(out).toEqual([
+      { group_id: 1, teacher_id: 1, d: D.wed, t: '10:00' },
+      { group_id: 2, teacher_id: 2, d: D.wed, t: '10:00' },
+    ]);
+  });
+
+  it('matches teachers so that every paired group in a slot gets one of its own', () => {
+    // group 1 can take 1 or 2 and would rather have 1; group 2 only has 1
+    const groups = paired({ 1: [1, 2], 2: [1] }).map((g) => (g.id === 1 ? { ...g, recent_teachers: [1] } : g));
+    const out = autoSchedule(base({
+      perSlot: 2,
+      groups,
+      slots: [{ d: D.wed, t: '10:00', teachers: [1, 2] }],
+      requests: [req(1, [[D.wed, '10:00']]), req(2, [[D.wed, '10:00']])],
+    }));
+    expect(out).toEqual([
+      { group_id: 1, teacher_id: 2, d: D.wed, t: '10:00' },
+      { group_id: 2, teacher_id: 1, d: D.wed, t: '10:00' },
+    ]);
+  });
+
+  it('never puts two groups paired with one teacher in the same slot', () => {
+    const out = autoSchedule(base({
+      perSlot: 2,
+      groups: paired({ 1: [1], 2: [1] }),
+      slots: [
+        { d: D.wed, t: '10:00', teachers: [1, 2] },
+        { d: D.thu, t: '10:00', teachers: [1] },
+      ],
+      requests: [req(1, [[D.wed, '10:00']]), req(2, [[D.wed, '10:00'], [D.thu, '10:00']])],
+    }));
+    expect(out).toEqual([
+      { group_id: 1, teacher_id: 1, d: D.wed, t: '10:00' },
+      { group_id: 2, teacher_id: 1, d: D.thu, t: '10:00' },
+    ]);
+  });
+
+  it('leaves a paired group out when its teachers are busy, rather than give it another one', () => {
+    const out = autoSchedule(base({
+      perSlot: 2,
+      groups: paired({ 1: [1] }),
+      slots: [{ d: D.wed, t: '10:00', teachers: [1, 2] }],
+      appointments: [{ group_id: 3, teacher_id: 1, d: D.wed, t: '10:00', status: 'confirmed' }],
+      requests: [req(1, [[D.wed, '10:00']])],
+    }));
+    expect(out).toEqual([]);
+  });
+
   it('puts one group in a slot by default, however many teachers are free (one meeting room)', () => {
     const out = autoSchedule(base({
       slots: [{ d: D.wed, t: '10:00', teachers: [1, 2] }],

@@ -23,7 +23,7 @@ describe('discord notifications', () => {
   const sent = async () => (await db.sql('select url, body from net.sent order by id')).map((r: any) => ({ url: r.url, text: r.body.content, body: r.body }));
 
   beforeAll(async () => {
-    db = await makeDb();
+    db = await makeDb({ legacy: true });
     await db.pg.exec(FAKE_PG_NET);
     await db.setNow('2026-10-14T09:00:00+08:00');
     const c = await db.codes();
@@ -94,7 +94,7 @@ describe('discord notifications', () => {
 
 describe('without pg_net', () => {
   it('reports the feature as unavailable', async () => {
-    const db = await makeDb();
+    const db = await makeDb({ legacy: true });
     const c = await db.codes();
     const admin = (await db.call('oh_join', { p_code: c.admin })).token;
     const g = (await db.one('select id from app.groups where no = 1')).id;

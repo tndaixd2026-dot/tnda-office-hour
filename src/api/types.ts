@@ -65,7 +65,8 @@ export interface Request {
   link: string | null;
   want: number;
   author: string;
-  status: 'open' | 'withdrawn';
+  /** open = booked, skipped = 這週不約 */
+  status: 'open' | 'withdrawn' | 'skipped';
   version: number;
   created_at: string;
   updated_at: string;
@@ -83,6 +84,10 @@ export interface StudentWeek {
   booked: number;
   /** 'YYYY-MM-DD HH:MM', course time: requests close then */
   deadline: string;
+  /** why the group's fixed day is off that week, if it is */
+  holiday: string | null;
+  /** what the group decided for that week */
+  status: Request['status'] | null;
 }
 
 export interface StudentSlot extends SlotRef {
@@ -94,12 +99,16 @@ export interface StudentSlot extends SlotRef {
 }
 
 export interface StudentAppointment {
+  /** its own length in minutes when shorter than the slot (a shared hour), else null */
+  minutes?: number | null;
   id: number;
   week_id: number;
   d: string;
   t: string;
   status: 'confirmed' | 'cancelled';
   teacher: string | null;
+  /** the session's Google Meet room */
+  room: string | null;
   cancel_reason: string | null;
   cancelled_by: string | null;
   can_cancel: boolean;
@@ -110,6 +119,11 @@ export interface StudentState {
   clock: ClockInfo;
   settings: Settings;
   me: SessionInfo;
+  /** the group's PM, when teacher names are shown to students */
+  pair: string | null;
+  /** the group's fixed hour a week; null until the admins set it */
+  /** shared: the other groups with the same fixed hour (one booking has it all, more split it) */
+  fixed: { dow: number; t: string; teacher: string | null; room: string | null; shared?: number[] } | null;
   members: string[];
   week_id: number | null;
   weeks: StudentWeek[];
@@ -121,12 +135,16 @@ export interface StudentState {
 }
 
 export interface TeacherSession {
+  /** its own length in minutes when shorter than the slot (a shared hour), else null */
+  minutes?: number | null;
   id: number;
   d: string;
   t: string;
   status: 'confirmed' | 'cancelled';
   teacher_id: number;
   teacher: string;
+  /** the session's Google Meet room */
+  room: string | null;
   /** the signed-in teacher's own session */
   mine: boolean;
   cancel_reason: string | null;
@@ -162,6 +180,8 @@ export interface TeacherState {
 }
 
 export interface Appointment {
+  /** its own length in minutes when shorter than the slot (a shared hour), else null */
+  minutes?: number | null;
   id: number;
   week_id: number;
   group_id: number;
@@ -186,6 +206,8 @@ export interface AdminWeek {
   /** 'YYYY-MM-DD HH:MM', course time */
   deadline: string;
   requests: number;
+  /** groups that said 這週不約 */
+  skipped: number;
   scheduled: number;
   drafts: number;
 }
@@ -199,12 +221,18 @@ export interface AdminGroup {
   done: number;
   total: number;
   recent_teachers: number[];
+  /** the group's fixed weekly slot: its teacher (null when unset), weekday (1 = Monday) and start */
+  teacher_id: number | null;
+  slot_dow: number | null;
+  slot_time: string | null;
 }
 
 export interface Teacher {
   id: number;
   name: string;
   active: boolean;
+  /** their Google Meet room */
+  room: string | null;
 }
 
 export interface ActivityEvent {
@@ -243,6 +271,10 @@ export interface ConfigGroup {
   members: Array<{ id: number; name: string; created_at: string; seen_at: string }>;
   roster: string[];
   used: boolean;
+  /** the group's fixed weekly slot: its teacher (null when unset), weekday (1 = Monday) and start */
+  teacher_id: number | null;
+  slot_dow: number | null;
+  slot_time: string | null;
 }
 
 export interface ConfigTeacher {
@@ -255,6 +287,8 @@ export interface ConfigTeacher {
   used: boolean;
   /** the shared account that sees every PM's sessions */
   team: boolean;
+  /** their Google Meet room */
+  room: string | null;
 }
 
 export interface ConfigAdmin {
@@ -357,6 +391,43 @@ export interface MailRecipient {
   /** empty: every teacher */
   teachers: number[];
   active: boolean;
+}
+
+export interface DiscordMessage {
+  content: string;
+  components: Array<{ type: number; components: Array<{ type: number; style: number; label: string; custom_id?: string; url?: string }> }>;
+}
+
+export interface DiscordGroup {
+  id: number;
+  no: number;
+  name: string;
+  webhook: boolean;
+  /** the channel was found from the webhook */
+  channel: boolean;
+  /** the bot can see the channel */
+  ready: boolean;
+  fixed: boolean;
+}
+
+export interface DiscordState {
+  clock: ClockInfo;
+  /** the bot's key is stored and its button presses come to the function */
+  ready: boolean;
+  name: string | null;
+  endpoint: string | null;
+  checked_at: string | null;
+  /** the database sends the 08:00 messages itself (pg_cron), on the minute */
+  cron: boolean;
+  /** the week Friday's message is about */
+  week: { id: number; label: string; start: string; deadline: string } | null;
+  /** Friday's question, Sunday's outcome and the day's reminder, for one group */
+  sample: DiscordMessage | null;
+  sample_summary: DiscordMessage | null;
+  sample_today: DiscordMessage | null;
+  sample_group: number | null;
+  groups: DiscordGroup[];
+  posts: Array<{ id: string; kind: 'ask' | 'summary' | 'today'; group_no: number; week: string; posted_at: string; closed_at: string | null; status: Request['status'] | null }>;
 }
 
 export interface MailState {

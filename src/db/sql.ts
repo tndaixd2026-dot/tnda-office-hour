@@ -27,6 +27,19 @@ import tdUnits from '../../supabase/migrations/20261020000024_td_units.sql?raw';
 import tdUnitOutline from '../../supabase/migrations/20261021000025_td_unit_outline.sql?raw';
 import tdTypeRatio from '../../supabase/migrations/20261021000026_td_type_ratio.sql?raw';
 import importSafeupdate from '../../supabase/migrations/20261021000027_import_safeupdate.sql?raw';
+import groupTeacher from '../../supabase/migrations/20261022000028_group_teacher.sql?raw';
+import groupTwoTeachers from '../../supabase/migrations/20261022000029_group_two_teachers.sql?raw';
+import appName from '../../supabase/migrations/20261022000030_app_name.sql?raw';
+import weeklyFixedSlot from '../../supabase/migrations/20261025000031_weekly_fixed_slot.sql?raw';
+import bookAhead from '../../supabase/migrations/20261026000032_book_ahead.sql?raw';
+import discordAsk from '../../supabase/migrations/20261026000033_discord_ask.sql?raw';
+import discordFormat from '../../supabase/migrations/20261027000034_discord_format.sql?raw';
+import discordReminders from '../../supabase/migrations/20261027000035_discord_reminders.sql?raw';
+import discordButtonWords from '../../supabase/migrations/20261027000036_discord_button_words.sql?raw';
+import mailSaturday from '../../supabase/migrations/20261031000037_mail_saturday.sql?raw';
+import mailFooter from '../../supabase/migrations/20261031000038_mail_footer.sql?raw';
+import discordCron from '../../supabase/migrations/20261101000039_discord_cron.sql?raw';
+import sharedSlot from '../../supabase/migrations/20261106000040_shared_slot.sql?raw';
 import seed from '../../supabase/seed.sql?raw';
 
 // Supabase provides these roles and the realtime schema; a bare Postgres
@@ -40,5 +53,5 @@ create function realtime.send(payload jsonb, event text, topic text, private boo
 returns void language sql as $$ select pg_notify('oh_sync', payload::text) $$;
 `;
 
-export const MIGRATIONS = [schema, api, discord, expiry, privateRealtime, calendarFeeds, nameLogin, adminNameLogin, oneGroupPerSlot, tdLessons, tdCalendarByTeacher, teamView, weekDeadline, weeklyMail, mailPreviewNote, taReminder, tdResidency, pmMeetRoom, tdMeetRoom, mailDesign, requestQuestions, mailRobust, monday8am, tdUnits, tdUnitOutline, tdTypeRatio, importSafeupdate];
+export const MIGRATIONS = [schema, api, discord, expiry, privateRealtime, calendarFeeds, nameLogin, adminNameLogin, oneGroupPerSlot, tdLessons, tdCalendarByTeacher, teamView, weekDeadline, weeklyMail, mailPreviewNote, taReminder, tdResidency, pmMeetRoom, tdMeetRoom, mailDesign, requestQuestions, mailRobust, monday8am, tdUnits, tdUnitOutline, tdTypeRatio, importSafeupdate, groupTeacher, groupTwoTeachers, appName, weeklyFixedSlot, bookAhead, discordAsk, discordFormat, discordReminders, discordButtonWords, mailSaturday, mailFooter, discordCron, sharedSlot];
 export const SEED = seed;

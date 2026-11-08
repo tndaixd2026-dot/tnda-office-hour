@@ -13,7 +13,7 @@ describe('calendar feeds', () => {
   };
 
   beforeAll(async () => {
-    db = await makeDb();
+    db = await makeDb({ legacy: true });
     await db.setNow('2026-10-14T09:00:00+08:00');
     const c = await db.codes();
     admin = (await db.call('oh_join', { p_code: c.admin })).token;

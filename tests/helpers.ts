@@ -16,11 +16,22 @@ export interface TestDb {
   codes(): Promise<{ groups: Record<number, string>; teachers: Record<string, string>; admin: string }>;
 }
 
-export async function makeDb(opts: { seed?: boolean } = {}): Promise<TestDb> {
+/** The rules before fixed weekly slots: 30-minute slots picked from a grid,
+ *  Sunday 12:00 deadline, one shared room. Suites written for them opt in. */
+const LEGACY = `
+  update app.settings set slot_minutes = 30, week_cap = 3, day_cap = 1, close_dow = 7, close_time = '12:00',
+                          show_teacher_names = false where id = 1;
+  update app.groups set teacher_id = null, slot_dow = null, slot_time = null where true;
+  update app.teachers set room = null where true;
+  update app.mail_settings set remind = true where true;
+`;
+
+export async function makeDb(opts: { seed?: boolean; legacy?: boolean } = {}): Promise<TestDb> {
   const pg = new PGlite();
   await pg.exec(BOOTSTRAP);
   for (const m of MIGRATIONS) await pg.exec(m);
   if (opts.seed !== false) await pg.exec(SEED);
+  if (opts.legacy) await pg.exec(LEGACY);
 
   const call = async (fn: string, args: Record<string, unknown> = {}) => {
     if (!/^oh_[a-z_]+$/.test(fn)) throw new Error('bad fn');

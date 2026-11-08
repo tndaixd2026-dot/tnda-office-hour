@@ -1,0 +1,7 @@
+{
+  "nodeModulesDir": "none",
+  "imports": {
+    "postgres": "npm:postgres@3.4.7",
+    "tweetnacl": "npm:tweetnacl@1.0.3"
+  }
+}

@@ -4,7 +4,8 @@ import type { JoinResult, PeekResult, Settings } from '../api/types';
 import { errorText } from '../app/messages';
 import { go } from '../app/router';
 import { signedIn, startDemo, useApp } from '../app/session';
-import { APP_NAME, APP_SHORT_NAME, HAS_CLOUD } from '../config';
+import { APP_NAME, APP_SHORT_NAME, HAS_CLOUD, RECORDING_NOTE } from '../config';
+import { closeRuleText, minutesText } from '../lib/format';
 import { Icon } from '../ui/icons';
 import { BrandMark, Btn, Field } from '../ui/kit';
 
@@ -18,17 +19,12 @@ function formatCode(v: string) {
   return c.length > 4 ? c.replace(/(.{4})(?=.)/g, '$1-') : c;
 }
 
-/** A clock face with its first half-hour lit: one Office Hour slot. */
+/** A clock face with a whole hour lit: one Office Hour a week. */
 export function ClockArt() {
   const ticks = Array.from({ length: 60 }, (_, i) => i);
   return (
     <svg class="clockface" viewBox="0 0 400 400" aria-hidden="true">
-      <defs>
-        <clipPath id="oh-half">
-          <rect x="200" y="0" width="200" height="400" />
-        </clipPath>
-      </defs>
-      <circle cx="200" cy="200" r="166" class="orange" clip-path="url(#oh-half)" />
+      <circle cx="200" cy="200" r="166" class="orange" />
       <circle cx="200" cy="200" r="194" fill="none" stroke="currentColor" stroke-opacity="0.14" />
       {ticks.map((i) => {
         const a = (i / 60) * Math.PI * 2;
@@ -174,13 +170,30 @@ export function Welcome({ initialCode }: { initialCode?: string }) {
       <span>這個網站還沒有連接雲端資料庫。你可以先用示範模式看看完整功能</span>
     </div>
   );
+  const deadline = settings ? closeRuleText(settings) : '截止時間';
+  const slot = settings?.slot_minutes ?? 60;
+  // how booking works, then a student-only demo to try it
   const demo = (
     <>
       <div class="divider" />
+      <section class="stack tight" aria-labelledby="howto">
+        <h2 id="howto" class="title-s">
+          學生怎麼預約
+        </h2>
+        <ol class="howto">
+          <li>輸入自己的名字登入，會自動進到你的組</li>
+          <li>每組有固定的業師和時段，首頁會寫你們是星期幾、幾點</li>
+          <li>在{deadline} 前決定那週要不要約。要約就按「預約這週」，寫好題目、想問 PM 的問題、目前進度和雲端連結，送出就排定</li>
+          <li>不約就按「這週不約」，讓業師知道。時間到了，點首頁的 Google Meet 連結進去就好</li>
+        </ol>
+        <p class="tiny muted">
+          每組每週一次，每次 {minutesText(slot)}。{RECORDING_NOTE}
+        </p>
+      </section>
       <div class="stack tight">
         <p class="small muted">{mode === 'name' ? '想先看看怎麼用？' : '還沒拿到代碼，或想先看看怎麼用？'}</p>
-        <Btn icon="play" loading={demoLoading} onClick={() => startDemo('student')}>
-          試玩示範（學生、助教、老師）
+        <Btn icon="play" loading={demoLoading} onClick={() => startDemo('student', { studentOnly: true })}>
+          試玩預約流程
         </Btn>
       </div>
     </>
@@ -202,7 +215,7 @@ export function Welcome({ initialCode }: { initialCode?: string }) {
             <br />
             {APP_NAME.slice(APP_SHORT_NAME.length + 1)}
           </h1>
-          <p class="lede">勾選你們可以的時段，助教排好時間後，全組的畫面會同時更新。不用來回傳訊息，也不會漏掉</p>
+          <p class="lede">每組和業師有固定的一小時，每週決定要不要約。送出就排定，全組和業師的畫面同時更新，不用來回傳訊息</p>
         </div>
       </section>
 

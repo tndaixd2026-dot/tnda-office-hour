@@ -449,16 +449,21 @@ p {
   letter-spacing: -0.01em;
   white-space: nowrap;
 }
+/* the admin sidebar is narrow: the full name wraps there */
+.side .brand-name {
+  white-space: normal;
+}
 /* phones: the top bar (and the sign-in page, whose headline spells the
-   name out) keep only the short name; the narrowest ones show the
-   connection status as just its dot (the text stays for screen readers) */
+   name out) keep only the short name; phones up to 420px show the
+   connection status as just its dot (the text stays for screen readers),
+   so the signed-in name keeps its room */
 @media (max-width: 640px) {
   .topbar .brand-tail,
   .welcome-art .brand-tail {
     display: none;
   }
 }
-@media (max-width: 380px) {
+@media (max-width: 420px) {
   .topbar .live-text {
     position: absolute;
     width: 1px;
@@ -651,6 +656,19 @@ a.place {
   text-decoration: underline;
   text-underline-offset: 3px;
   overflow-wrap: anywhere;
+}
+/* numbered how-to steps on the sign-in page */
+.howto {
+  margin: 0;
+  padding-left: 1.4em;
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.howto li::marker {
+  color: var(--accent-text);
+  font-weight: 700;
 }
 .link-btn {
   background: none;
@@ -1458,6 +1476,13 @@ ul.steps {
   display: grid;
   line-height: 1.35;
 }
+/* a session's time and day, which leave the topic more room on a phone */
+.li .when.short {
+  width: 68px;
+}
+.li .grow > .small {
+  text-wrap: pretty;
+}
 .li .when b {
   font-family: var(--mono);
   font-size: 15px;
@@ -1836,6 +1861,10 @@ ul.steps {
 }
 .welcome-art .eyebrow {
   color: rgb(245 244 240 / 0.6);
+}
+/* the name's first line, 叁式 ULTRACOMBOS, stays on one line on a desktop */
+.welcome-art .title-xl {
+  font-size: clamp(32px, 4vw, 48px);
 }
 .welcome-art .lede {
   max-width: 420px;
@@ -2421,6 +2450,11 @@ table.t tr.mine td {
   flex: 0 0 auto;
 }
 
+.check:has(input:disabled) {
+  color: var(--faint);
+  cursor: not-allowed;
+}
+
 /* an email, as it will arrive */
 .mail-frame {
   width: 100%;
@@ -2985,4 +3019,121 @@ button.ls-day:hover {
   body {
     background: #fff;
   }
+}
+
+/* Discord 詢問: the week's messages, and roughly how each looks in Discord */
+.dc-plan {
+  display: grid;
+  gap: 10px;
+  max-width: 640px;
+  margin: 0;
+}
+.dc-plan > div {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: 12px;
+  align-items: baseline;
+}
+.dc-plan dt {
+  font-size: 14px;
+  font-weight: 600;
+}
+.dc-plan dd {
+  margin: 0;
+  color: var(--ink-2);
+}
+.dc-previews {
+  display: grid;
+  gap: 18px;
+}
+.dc-msg {
+  display: grid;
+  gap: 10px;
+  max-width: 560px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+.dc-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dc-avatar {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--bg);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+.dc-tag {
+  padding: 0 6px;
+  border-radius: var(--r-xs);
+  background: #4752c4;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+}
+.dc-body {
+  display: grid;
+  gap: 2px;
+  font-size: 15px;
+  line-height: 1.55;
+}
+.dc-body p {
+  overflow-wrap: anywhere;
+}
+/* Discord's ## and ### headings, -# small text and > quotes */
+.dc-body .dc-h2 {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.dc-body .dc-h3 {
+  margin-top: 2px;
+  font-size: 17px;
+  font-weight: 700;
+}
+.dc-body .dc-sub {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.dc-body .dc-quote {
+  padding-left: 12px;
+  border-left: 4px solid var(--line-2);
+}
+.dc-body a {
+  color: var(--info);
+}
+.dc-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.dc-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--r-xs);
+  background: var(--surface-3);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+/* Discord's button styles: 1 primary, 4 danger (the same in both themes) */
+.dc-btn.s1 {
+  background: #4752c4;
+  color: #ffffff;
+}
+.dc-btn.s4 {
+  background: #b02f19;
+  color: #ffffff;
 }

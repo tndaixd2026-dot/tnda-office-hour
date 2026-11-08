@@ -8,7 +8,7 @@ update app.settings set
   host_label   = '叁式 PM',
   location     = 'Google Meet',
   lead_days    = 4,
-  week_cap     = 3,
+  week_cap     = 1,
   day_cap      = 1,
   cancel_hours = 24
 where id = 1;
@@ -20,17 +20,26 @@ insert into app.groups (no, name, code) values
   (4, '閃身部',               app.new_code(8)),
   (5, '隨便打',               app.new_code(8)),
   (6, '會努力的',             app.new_code(8)),
-  (7, '',                     app.new_code(8));
+  (7, '媒日媒夜',             app.new_code(8));
 
-insert into app.teachers (name, code, sort) values
-  ('Joseph',  app.new_code(10), 1),
-  ('Prolong', app.new_code(10), 2),
-  ('Tim',     app.new_code(10), 3);
+-- each PM meets in their own Google Meet room
+insert into app.teachers (name, code, sort, room) values
+  ('Joseph',  app.new_code(10), 1, 'https://meet.google.com/wgj-uxbz-bcv'),
+  ('Prolong', app.new_code(10), 2, 'https://meet.google.com/gtj-tcpu-wmu'),
+  ('Tim',     app.new_code(10), 3, 'https://meet.google.com/umx-ikqj-ghi');
+
+-- each group's fixed hour a week (1 = Monday)
+update app.groups g set teacher_id = t.id, slot_dow = v.dow, slot_time = v.tm::time
+  from (values (1, 'Joseph', 2, '17:00'), (2, 'Prolong', 3, '10:00'), (3, 'Prolong', 3, '11:00'),
+               (4, 'Prolong', 4, '10:00'), (5, 'Tim', 4, '17:00'), (6, 'Joseph', 1, '17:00'),
+               (7, 'Joseph', 2, '18:00')) as v (no, name, dow, tm)
+  join app.teachers t on t.name = v.name
+ where g.no = v.no;
 
 -- a role word anyone could guess, so this account signs in with its code only
 insert into app.admins (name, code, name_login) values ('助教', app.new_code(12), false);
 
--- Weekly availability (1 = Monday)
+-- Weekly availability (1 = Monday); what no group has fixed is each PM's backup time
 insert into app.blocks (teacher_id, dow, start_time, end_time)
 select t.id, b.dow, b.s::time, b.e::time
   from (values

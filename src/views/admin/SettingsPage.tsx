@@ -82,7 +82,7 @@ function SettingsView({ cfg, reload }: { cfg: AdminConfig; reload: () => void })
               </Field>
             </div>
             <div class="grow" style={{ minWidth: '180px' }}>
-              <Field label="地點">
+              <Field label="預設地點" help="業師沒有設定討論室時使用">
                 <input class="input" value={s.location} maxLength={60} onInput={(e) => set('location', (e.target as HTMLInputElement).value)} />
               </Field>
             </div>
@@ -123,7 +123,7 @@ function SettingsView({ cfg, reload }: { cfg: AdminConfig; reload: () => void })
                     ))}
                   </select>
                 </div>
-                <span class="help">截止後整週的需求就不能再修改或撤回，助教接著排時間</span>
+                <span class="help">截止後各組就不能再修改內容或改成不約</span>
               </div>
             </div>
             <div class="grow" style={{ minWidth: '200px' }}>

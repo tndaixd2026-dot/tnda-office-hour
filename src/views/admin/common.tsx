@@ -1,5 +1,4 @@
-import type { ActivityEvent, AdminState, Appointment, Settings } from '../../api/types';
-import { whenText } from '../../lib/format';
+import type { ActivityEvent } from '../../api/types';
 import { md } from '../../lib/time';
 
 export function groupName(groups: Array<{ id: number; no: number; name: string }>, id: number | null): string {
@@ -17,9 +16,11 @@ export function eventText(e: ActivityEvent, groups: Array<{ id: number; no: numb
     case 'member.joined':
       return e.role === 'student' ? `${who} 加入了${g}` : `${who} 登入了`;
     case 'request.created':
-      return `${who} 送出${g}的需求「${d.topic ?? ''}」`;
+      return `${who} 幫${g}預約了「${d.topic ?? ''}」`;
     case 'request.updated':
-      return `${who} 更新了${g}的需求`;
+      return `${who} 更新了${g}的預約`;
+    case 'request.skipped':
+      return `${who} 決定${g}這週不約`;
     case 'request.withdrawn':
       return `${who} 撤回了${g}的需求`;
     case 'appt.drafted':
@@ -59,26 +60,10 @@ export function eventText(e: ActivityEvent, groups: Array<{ id: number; no: numb
 }
 
 export function eventClass(kind: string): string {
-  if (kind === 'appt.cancelled' || kind === 'request.withdrawn') return 'k-cancel';
+  if (kind === 'appt.cancelled' || kind === 'request.withdrawn' || kind === 'request.skipped') return 'k-cancel';
   if (kind.startsWith('request.')) return 'k-request';
   if (kind.startsWith('appt.')) return 'k-appt';
   return '';
-}
-
-/** The message an admin pastes into a group's Discord channel. */
-export function noticeText(st: Pick<AdminState, 'groups' | 'requests' | 'settings'>, groupId: number, appts: Appointment[], siteUrl: string): string {
-  const s: Settings = st.settings;
-  const g = st.groups.find((x) => x.id === groupId);
-  const mine = appts.filter((a) => a.group_id === groupId && a.status === 'confirmed').sort((a, b) => (a.d + a.t).localeCompare(b.d + b.t));
-  const req = st.requests.find((r) => r.group_id === groupId && r.status === 'open');
-  const lines = [
-    `【Office Hour】第 ${g?.no ?? ''} 組${g?.name ? `「${g.name}」` : ''}`,
-    ...mine.map((a) => `時間：${whenText(a.d, a.t, s.slot_minutes)}`),
-    s.location ? `地點：${s.location}` : '',
-    req ? `題目：${req.topic}` : '',
-    `要取消請在 ${s.cancel_hours} 小時前到平台操作：${siteUrl}`,
-  ];
-  return lines.filter(Boolean).join('\n');
 }
 
 export const siteUrl = () => `${location.origin}${location.pathname}`;

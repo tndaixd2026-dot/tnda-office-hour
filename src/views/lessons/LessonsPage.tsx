@@ -52,7 +52,11 @@ export function LessonsPage({ who }: { who?: string }) {
     };
   }, [title]);
 
-  const back = auth ? (auth.session.role === 'admin' ? { href: '#/admin/td', label: '回到後台' } : { href: '#/', label: '回到 Office Hour' }) : null;
+  const back = !auth
+    ? { href: '#/', label: '回到首頁' }
+    : auth.session.role === 'admin'
+      ? { href: '#/admin/td', label: '回到後台' }
+      : { href: '#/', label: '回到 Office Hour' };
   return (
     <>
       <header class="topbar">
@@ -65,11 +69,10 @@ export function LessonsPage({ who }: { who?: string }) {
           </span>
           <span class="grow" />
           <LiveBadge />
-          {back && (
-            <a class="btn sm ghost" href={back.href}>
-              {back.label}
-            </a>
-          )}
+          <a class="btn sm ghost" href={back.href}>
+            <Icon name="back" size={16} />
+            {back.label}
+          </a>
         </div>
       </header>
       {data ? <LessonsHome st={data} initialWho={who} /> : error ? <ErrorState onRetry={reload} /> : <Loading />}
