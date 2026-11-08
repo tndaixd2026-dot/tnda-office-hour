@@ -10,6 +10,10 @@ TN0006「跨域數位製作實務」的 Office Hour 預約平台，名稱是「�
 
 TD 課表**以 TNDA Notion 為準**：老師在 Notion 資料庫「連我阿公都會TD」（資料來源「備課表」，id 在 `scripts/td-weekly-lib.ts`）排課、勾「老師確認」。`.github/workflows/td-weekly.yml`（`scripts/td-weekly.mjs`）週六 08:00 在 Discord 技術群組請老師確認下週、週日 12:00 提醒沒確認的課、週日 20:00 發下週課表到公告欄（還有課沒確認就先不發、通知助教），每天 05:17 把網站的課（從 Notion 第一堂那天起）同步成 Notion 的樣子：用一個交易內才存在的 admin session「Notion 同步」呼叫 `oh_admin_lesson_save`／`oh_admin_lesson_delete`，同日同時同講師的課保留 id。時數只能出現在技術群組，不能進公告欄或 Actions 紀錄（公開）。
 
+TD 的每週人工步驟（助教說「更新下週 Figma」時一起做）：
+- **Figma**：Slides 檔「115-1 課程封面」，每週一張「WEEK 0N 本週課表」（每列：日期、星期、時間、類型標籤、標題列〔單元＋學長姐〕、大綱，基礎教學標籤 #FF4F2C、案例分享 #2FA85A），後面接每堂一張封面（週次、系列名稱「連我阿公都會TD｜類型」、課程名稱、授課學長姐、日期、星期、時間）。同一位老師連續兩堂同名的課合成一列和一張封面。內容照 Notion。
+- **Google 雲端**：TD 的補課資料夾（網址由使用者提供，不寫進 repo）裡每個上課日一個子資料夾，名稱像「20261026（一）浡崴」，裡面放那天的錄影、簡報 PDF（檔名「TD｜20261027｜哲瑜｜課名.pdf」）和示範檔（Notion「示範檔」欄位的 .tox、QR code 圖片，保留原檔名）。Notion 的檔案網址 5 分鐘就失效，下載後要馬上用。這個工作階段一次最多上傳約 3 MB，超過的檔案交給使用者自己拖進去。週三 VSAI 的補課影片在另一個資料夾，不要放錯。
+
 - Repo：`tndaixd2026-dot/tnda-office-hour`（public）
 - 網站：https://tndaixd2026-dot.github.io/tnda-office-hour/（示範模式：`#/demo`）
 - 資料庫：Supabase 組織「TNDA Office Hour」，東京區，專案 ref 在 `.env.production` 的網址裡
