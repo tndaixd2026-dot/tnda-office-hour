@@ -335,7 +335,10 @@ try {
     const d = page.getByRole('dialog', { name: '調整類型比例' });
     // it opens on the mix the lessons have now, so nothing moves yet
     await d.getByText('不需要改任何一堂').waitFor();
-    for (const t of ['基礎教學', '案例分享', '駐村創作']) await d.getByLabel(t).fill('1');
+    // lopsided, so lessons move whatever the date (an even split may be the
+    // mix there is already once some lessons are past)
+    await d.getByLabel('基礎教學').fill('4');
+    for (const t of ['案例分享', '駐村創作']) await d.getByLabel(t).fill('1');
     await d.getByText(/會改 \d+ 堂的類型/).waitFor();
     await d.getByText('已確定的 1 堂').waitFor();
     await d.getByText('看會改哪幾堂').click();
@@ -346,7 +349,7 @@ try {
     await d.getByLabel('案例分享').fill('1');
     await d.getByRole('button', { name: '套用' }).click();
     await page.getByText(/已調整 \d+ 堂的類型/).waitFor();
-    await page.getByText('目標 1 : 1 : 1').waitFor();
+    await page.getByText('目標 4 : 1 : 1').waitFor();
     // the units' lessons were left alone: lessons outside units moved first
     check((await page.locator('section[aria-labelledby="l-units"] .ls-edit').first().textContent()).includes('共 3 堂'), 'the unit should keep its lessons');
   });

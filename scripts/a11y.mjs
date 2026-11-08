@@ -57,6 +57,7 @@ for (const scheme of ['light', 'dark']) {
   await scan(page, 'admin TD unit form');
   await page.getByRole('dialog').getByRole('button', { name: '取消' }).click();
   await page.getByRole('button', { name: '調整比例' }).click();
+  for (const t of ['基礎教學', '駐村創作']) await page.getByRole('dialog').getByLabel(t).fill('1');
   await page.getByRole('dialog').getByLabel('案例分享').fill('20');
   await page.getByRole('dialog').getByText('看會改哪幾堂').click();
   await page.waitForTimeout(400);

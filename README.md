@@ -53,6 +53,22 @@ TN0006「一場體驗如何發生：跨域數位製作實務」的 Office Hour �
 - **助教在後台「TD 課表」維護。** 新增、修改、刪除每一堂，改頁面標題、上課地點和公告；所有人的畫面即時更新。同一時間只能排一堂課（不管是哪位講師），撞時段時會直接說和哪一堂重疊。
 - **匯入與匯出。** 格式和原本獨立課表網站的 `schedule.json` 一樣，另外多了 `units`（`{type, no, title, topic}`）和每堂的 `unit`（同類型單元的編號）。新學期可以把整份課表做成 JSON 一次匯入（會取代全部的課；檔案有 `units` 時單元也一起換掉，沒有時保留現有的單元）。
 - 這份課表是公開的，所以不要放薪資、時數、助教不能上課的日期等內部資料。
+- **以 Notion 為準。** 兩位老師在 TNDA Notion 的「連我阿公都會TD」（資料來源「備課表」）排課，每天清晨 `TD weekly` 會把網站上從 Notion 第一堂課那天起的課改成和 Notion 一樣（同一天、同一個開始時間、同一位講師的課只更新內容，所以行事曆的事件和單元都留著）。要改課請改 Notion，在後台改的會被蓋掉；單元只在後台分。
+
+### TD 每週流程
+
+`.github/workflows/td-weekly.yml` 執行 `scripts/td-weekly.mjs`，和每週寄信一樣提早啟動、等到整點才發：
+
+| 時間（台北） | 發到 | 內容 |
+|---|---|---|
+| 週六 08:00 | Discord 技術群組 | 標記兩位老師，列出各自下週的課（連到 Notion）、確認狀態、檔案數和時數（已上、已排、總共 42 小時） |
+| 週日 12:00 | Discord 技術群組 | 只列還沒勾「老師確認」的課，只標記那位老師；全部確認就不發 |
+| 週日 20:00 | Discord 公告欄 | 下週課表、大綱、Google Meet 連結、簡報連結，上傳到 Notion 的檔案直接附在訊息裡（Discord 一則最多 10 MB，太大的會在技術群組提醒助教改放雲端）；發完在 Notion 勾「已公告」。還有課沒確認時先不發，改在技術群組通知助教 |
+| 每天 05:17 | 網站 | TD 課表跟 Notion 同步 |
+
+老師在 Notion 改日期、時間或內容，或勾「老師確認」；週日的公告只用 Notion 當下的資料。課沒確認但還是要發時，Actions →「TD weekly」→ Run workflow，選 `announce` 並勾 `force`。選 `check` 只檢查設定（Notion、兩個 Webhook、網站同步會改幾堂），什麼都不發；勾 `test` 會把訊息發到技術群組、標明是測試、不標記老師。
+
+需要的 repo secret：`NOTION_TOKEN`（Notion 連接「TD 課表小幫手」的 API 權杖，資料庫要在「•••」→「連接」加上它）、`DISCORD_TECH_WEBHOOK`、`DISCORD_ANNOUNCE_WEBHOOK`，以及原本的 `SUPABASE_DB_PASSWORD`。Discord 使用者 ID 在 `scripts/td-weekly-lib.ts` 的 `TEACHERS`。紀錄是公開的，所以只印數量，不印訊息內容、時數或 Webhook。
 
 ## 設計
 
@@ -102,7 +118,7 @@ flowchart LR
 ```bash
 npm install
 npm run dev          # http://localhost:5173（沒有 .env.local 時只能用示範模式）
-npm test             # 資料庫 API、排程演算法、Discord 通知、行事曆、TD 課表、寄信：125 項
+npm test             # 資料庫 API、排程演算法、Discord 通知、行事曆、TD 課表、寄信、TD 每週流程：134 項
 npm run build && npx vite preview --port 4173
 npm run e2e -- http://localhost:4173/   # 真實瀏覽器跑三種角色（示範模式）
 ```

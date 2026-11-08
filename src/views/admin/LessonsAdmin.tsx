@@ -153,6 +153,9 @@ export function LessonsAdmin() {
         <p class="muted small" style={{ maxWidth: '600px' }}>
           這份課表是公開的，不用登入就能看。在這裡改動，公開頁和訂閱的行事曆會跟著更新
         </p>
+        <p class="muted small" style={{ maxWidth: '600px' }}>
+          課的日期、時間、講師、類型和大綱以 TNDA Notion 的「連我阿公都會TD」為準，每天清晨自動同步過來，要改課請到 Notion 改；單元在這裡分
+        </p>
       </div>
 
       <div class="card tight stack tight">

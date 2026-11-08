@@ -1,0 +1,68 @@
+# The TD 專班's weekly round (scripts/td-weekly.mjs), from the timetable in
+# the TNDA Notion. GitHub starts scheduled runs late at busy times, so each
+# one starts early and the script waits for the exact time in Taipei:
+#   Saturday 08:00  technical group: each teacher checks next week
+#   Sunday 12:00    technical group: lessons still unconfirmed
+#   Sunday 20:00    announcements: next week for the students
+#   every day       the site's TD timetable follows Notion
+# Needs the repository secrets NOTION_TOKEN, DISCORD_TECH_WEBHOOK,
+# DISCORD_ANNOUNCE_WEBHOOK and SUPABASE_DB_PASSWORD.
+name: TD weekly
+
+on:
+  schedule:
+    - cron: '38 23 * * 5' # Saturday 07:38 Taipei (Friday 23:38 UTC)
+    - cron: '38 3 * * 0' # Sunday 11:38 Taipei
+    - cron: '38 11 * * 0' # Sunday 19:38 Taipei
+    - cron: '17 21 * * *' # every day 05:17 Taipei
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: 'check：只檢查設定，不發任何訊息；teachers：發給老師確認下週課表；remind：提醒還沒確認的課；announce：發下週課表到公告欄；sync：讓網站的 TD 課表跟 Notion 一樣'
+        type: choice
+        options: [check, teachers, remind, announce, sync]
+        default: check
+      test:
+        description: '測試：發到技術群組、標明是測試、不標記老師'
+        type: boolean
+        default: false
+      force:
+        description: '有課還沒確認，或這週已經公告過，也照樣發到公告欄'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: td-weekly
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      - name: Run
+        env:
+          KIND: ${{ github.event_name == 'workflow_dispatch' && inputs.kind || (github.event.schedule == '38 23 * * 5' && 'teachers' || (github.event.schedule == '38 3 * * 0' && 'remind' || (github.event.schedule == '38 11 * * 0' && 'announce' || 'sync'))) }}
+          SEND_AT: ${{ github.event_name == 'schedule' && (github.event.schedule == '38 23 * * 5' && '08:00' || (github.event.schedule == '38 3 * * 0' && '12:00' || (github.event.schedule == '38 11 * * 0' && '20:00' || ''))) || '' }}
+          # the first weekly round is Saturday 11/14; the daily sync runs already
+          START: ${{ github.event_name == 'schedule' && '2026-11-14' || '' }}
+          TEST: ${{ inputs.test && '1' || '' }}
+          FORCE: ${{ inputs.force && '1' || '' }}
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          DISCORD_TECH_WEBHOOK: ${{ secrets.DISCORD_TECH_WEBHOOK }}
+          DISCORD_ANNOUNCE_WEBHOOK: ${{ secrets.DISCORD_ANNOUNCE_WEBHOOK }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          # session-mode pooler: runners have no IPv6 for the direct db host
+          POOLER_HOST: aws-0-ap-northeast-1.pooler.supabase.com
+        run: node scripts/td-weekly.mjs
